@@ -1,0 +1,12 @@
+/target
+/Cargo.lock
+
+.vscode/
+.idea/
+*.vim
+*.vi
+
+.env
+
+.DS_Store
+hitori_macros_debug.rs

@@ -1,0 +1,24 @@
+[package]
+name = "hitori"
+version = "0.1.3"
+authors = ["Artur Helmanau <m30bit@gmail.com>"]
+categories = ["text-processing"]
+description = "Generic regular expressions"
+edition = "2021"
+keywords = ["regex"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/30bit/hitori"
+readme = "../README.md"
+
+[features]
+default = ["box", "macros"]
+# blanket implementations of all traits for boxes using alloc crate.
+box = ["hitori-macros?/box"]
+# `impl_expr_mut` and `impl_expr` macros.
+macros = ["hitori-macros"]
+# finds hitori package to be used in macros even if
+# it has been renamed in Cargo.toml. `macros` is required.
+find-hitori = ["hitori-macros?/proc-macro-crate"]
+
+[dependencies]
+hitori-macros = { version = "0.1.0", path = "../hitori-macros", optional = true }
