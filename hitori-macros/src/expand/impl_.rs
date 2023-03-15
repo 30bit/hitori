@@ -1,4 +1,5 @@
 mod matches_block;
+mod __new_matches_block;
 
 use crate::parse::{self, impl_::Config};
 use proc_macro2::{Ident, TokenStream};

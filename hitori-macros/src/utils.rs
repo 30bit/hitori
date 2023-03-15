@@ -1,5 +1,5 @@
-use proc_macro2::Ident;
-use quote::{format_ident, ToTokens};
+use proc_macro2::{Ident, TokenStream};
+use quote::{format_ident, quote, ToTokens};
 use std::{borrow::BorrowMut, convert, fmt::Write as _, mem};
 use syn::{
     parse::Parse, punctuated::Punctuated, Attribute, Binding, Expr, ExprArray, ExprAssign,
@@ -8,8 +8,9 @@ use syn::{
     ExprLet, ExprLit, ExprLoop, ExprMacro, ExprMatch, ExprMethodCall, ExprParen, ExprPath,
     ExprRange, ExprReference, ExprRepeat, ExprReturn, ExprStruct, ExprTry, ExprTryBlock, ExprTuple,
     ExprType, ExprUnary, ExprUnsafe, ExprWhile, ExprYield, GenericArgument, GenericParam,
-    ParenthesizedGenericArguments, Path, PathArguments, ReturnType, Token, Type, TypeImplTrait,
-    TypeParam, TypeParamBound, TypeParen, TypePath, TypePtr, TypeReference, TypeTraitObject,
+    LifetimeDef, ParenthesizedGenericArguments, Path, PathArguments, ReturnType, Token, Type,
+    TypeImplTrait, TypeParam, TypeParamBound, TypeParen, TypePath, TypePtr, TypeReference,
+    TypeTraitObject,
 };
 
 pub fn hitori_ident() -> Ident {
@@ -267,6 +268,27 @@ pub fn has_generic_arg_any_generic_params(
             .any(|bound| has_type_param_bound_any_generic_params(params, bound)),
         _ => false,
     }
+}
+
+pub fn remove_generic_params_bounds(params: &mut Punctuated<GenericParam, Token![,]>) {
+    for param in params {
+        if let GenericParam::Type(ty) = param {
+            ty.bounds = Punctuated::new()
+        } else if let GenericParam::Lifetime(l) = param {
+            l.bounds = Punctuated::new()
+        }
+    }
+}
+
+pub fn expand_lifetime_generic_params_into_unit_refs<'a, I>(iter: I) -> TokenStream
+where
+    I: IntoIterator<Item = &'a LifetimeDef>,
+{
+    let mut output = TokenStream::new();
+    for LifetimeDef { lifetime, .. } in iter {
+        output.extend(quote! { & #lifetime (), });
+    }
+    output
 }
 
 pub fn take_hitori_attrs(expr: &mut Expr) -> Vec<Attribute> {
