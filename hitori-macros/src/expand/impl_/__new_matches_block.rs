@@ -46,6 +46,16 @@ impl Parse for Repeat {
     }
 }
 
+impl Repeat {
+    fn has_upper_bound(&self) -> bool {
+        match self {
+            Repeat::Exact(_) => true,
+            Repeat::Range(range) => range.to.is_some(),
+            _ => false,
+        }
+    }
+}
+
 type Group<'a> = &'a mut Punctuated<Expr, Token![,]>;
 
 enum TreeInner<'a> {
@@ -194,9 +204,10 @@ fn expand_wrapper(
 struct State {
     first_fn_arg: FnArg,
     returned_last_ty: Type,
-    test_index: usize,
+    returned_no_last_ty: Type,
+    subexpr_index: usize,
     returns_last: bool,
-    last_test_fn_ident: Option<Ident>,
+    last_subexpr_fn_ident: Option<Ident>,
     capture_fn_idents: Vec<Ident>,
 }
 
@@ -210,26 +221,106 @@ impl State {
     fn new(idx_arg: &GenericArgument, ch_arg: &GenericArgument) -> Self {
         Self {
             first_fn_arg: parse_quote! { first: (#idx_arg, #ch_arg) },
-            returned_last_ty: parse_quote! { core::option::Option<#ch_arg> },
-            test_index: 0,
+            returned_last_ty: parse_quote! {
+                core::result::Result<core::option::Option<#ch_arg>>
+            },
+            returned_no_last_ty: parse_quote! {
+                core::result::Result<core::option::Option<()>>
+            },
+            subexpr_index: 0,
             returns_last: false,
-            last_test_fn_ident: None,
+            last_subexpr_fn_ident: None,
             capture_fn_idents: Vec::with_capacity(64),
         }
     }
 
     fn set_next_test_ident(&mut self) {
-        self.last_test_fn_ident = Some(format_ident!("__test{}", self.test_index));
-        self.test_index += 1;
+        self.last_subexpr_fn_ident = Some(format_ident!("__subexpr{}", self.subexpr_index));
+        self.subexpr_index += 1;
     }
 
     fn expand_tree(
         &mut self,
         Tree {
-            inner, mut capture, ..
+            inner,
+            repeat,
+            mut capture,
         }: Tree,
     ) -> syn::Result<TokenStream> {
-        todo!()
+        let has_first = self.returns_last;
+        let is_test = matches!(inner, TreeInner::Test(_));
+
+        let ExpandTreeInnerOutput {
+            extra: mut output,
+            body: inner_body,
+        } = self.expand_tree_inner(inner)?;
+
+        let inner_returns_last = !is_test && self.returns_last;
+        let inner_return_value = if inner_returns_last {
+            quote! { first }
+        } else {
+            self.returns_last = false;
+            quote! { () }
+        };
+
+        self.set_next_test_ident();
+        output.extend(self.expand_subexpr_sig(has_first));
+        output.extend(quote! {{
+            #inner_body
+            core::result::Result::Ok(core::option::Option::Some(#inner_return_value))
+        }});
+
+        self.returns_last = repeat
+            .as_ref()
+            .map(|repeat| !repeat.has_upper_bound())
+            .unwrap_or(inner_returns_last);
+
+        if capture.is_empty() && repeat.is_none() {
+            return Ok(output);
+        }
+
+        let mut body = if capture.is_empty() {
+            TokenStream::new()
+        } else {
+            quote! { let start = self.__end.clone(); }
+        };
+
+        if repeat.is_none() {
+            let inner_call = self.expand_subexpr_call(has_first);
+            body.extend(quote! {
+                let output = #inner_call?;
+                if output.is_none() {
+                    return core::result::Result::Ok(output);
+                }
+            })
+        } else {
+            unimplemented!();
+        }
+
+        if !capture.is_empty() {
+            for f in &capture[..capture.len() - 1] {
+                body.extend(quote! { capture.#f(start.clone()..self.__end.clone())?; });
+            }
+            let f = capture.last().unwrap();
+            body.extend(quote! { capture.#f(start..self.__end.clone())?; });
+        }
+
+        self.set_next_test_ident();
+        output.extend(self.expand_subexpr_sig(has_first));
+
+        if repeat.is_none() {
+            body.extend(quote! {
+                core::result::Result::Ok(output)
+            });
+        } else {
+            unimplemented!();
+        }
+
+        output.extend(quote! { { #body } });
+
+        self.capture_fn_idents.append(&mut capture);
+
+        Ok(output)
     }
 
     fn expand_tree_inner(&mut self, inner: TreeInner) -> syn::Result<ExpandTreeInnerOutput> {
@@ -245,11 +336,11 @@ impl State {
         for expr in group {
             let has_first = self.returns_last;
             output.extra.extend(self.expand_tree(expr.try_into()?)?);
-            let call = self.expand_test_call(has_first);
+            let call = self.expand_subexpr_call(has_first);
             output.body.extend(if self.returns_last {
-                quote! { let first = if let Some(first) = #call { first } else { return None; } }
+                quote! { let first = if let Some(first) = #call? { first } else { return None; } }
             } else {
-                quote! { if #call.is_none() { return None } }
+                quote! { if #call?.is_none() { return None } }
             });
         }
         Ok(output)
@@ -266,31 +357,44 @@ impl State {
         let mut body = if self.returns_last {
             TokenStream::default()
         } else {
-            quote! { let first = if let Some(x) = self.__iter.next() { x } else { return Ok(None); }; }
+            quote! {
+                let first = if let Some(first) = self.__iter.next() {
+                    first
+                } else {
+                    return core::result::Result::Ok(core::option::Option::None);
+                };
+            }
         };
-        body.extend(quote! { if (#expr)(first.1) { self.end = first.0 } else { return Ok(None); }; });
+        body.extend(quote! {
+            if (#expr)(first.1) {
+                self.__end = first.0
+            } else {
+                return core::result::Result::Ok(core::option::Option::None);
+            };
+        });
         ExpandTreeInnerOutput {
             body,
             extra: TokenStream::new(),
         }
     }
 
-    fn expand_test_sig(&self, has_first: bool) -> TokenStream {
-        let test_ident = &self.last_test_fn_ident;
+    fn expand_subexpr_sig(&self, has_first: bool) -> TokenStream {
+        let test_ident = &self.last_subexpr_fn_ident;
         let first = has_first.then_some(&self.first_fn_arg);
         let mut output = quote! {
             fn #test_ident(&mut self, #(#first)?) ->
         };
         if self.returns_last {
-            self.returned_last_ty.to_tokens(&mut output);
+            &self.returned_last_ty
         } else {
-            output.extend(quote! { core::option::Option<()> });
+            &self.returned_no_last_ty
         }
+        .to_tokens(&mut output);
         output
     }
 
-    fn expand_test_call(&self, has_first: bool) -> TokenStream {
-        let test_ident = &self.last_test_fn_ident;
+    fn expand_subexpr_call(&self, has_first: bool) -> TokenStream {
+        let test_ident = &self.last_subexpr_fn_ident;
         let first = has_first.then_some(&self.first_fn_arg);
         quote! {
             #test_ident(self, #(#first)?)
