@@ -14,18 +14,18 @@ fn matches_sig(
 ) -> TokenStream {
     let mut_ = is_mut.then_some(<Token![mut]>::default());
     quote! {
-        fn matches<I>(
+        fn matches<__I>(
             &#mut_ self,
             capture: &mut #capture_arg,
             mut start: #idx_arg,
-            iter: I
+            iter: __I
         ) -> core::result::Result<
             core::option::Option<core::ops::RangeTo<#idx_arg>>,
             <#capture_arg as #hitori_ident::CaptureMut>::Error
         >
         where
-            I: IntoIterator<Item = (#idx_arg, #ch_arg)>,
-            I::IntoIter: Clone
+            __I: IntoIterator<Item = (#idx_arg, #ch_arg)>,
+            __I::IntoIter: Clone,
     }
 }
 
