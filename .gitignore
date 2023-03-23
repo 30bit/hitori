@@ -9,4 +9,3 @@
 .env
 
 .DS_Store
-hitori_macros_debug.rs

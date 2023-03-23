@@ -348,8 +348,15 @@ pub fn take_hitori_attrs(expr: &mut Expr) -> Vec<Attribute> {
 pub fn debug(tokens: proc_macro2::TokenStream) -> Result<(), Box<dyn std::error::Error>> {
     use rust_format::{Formatter as _, RustFmt};
     use std::{env, fs, path::PathBuf};
+    let dir = if let Ok(out_dir) = env::var("CARGO_TARGET_DIR") {
+        out_dir.into()
+    } else {
+        let dir = PathBuf::from("target/hitori");
+        fs::create_dir_all(&dir)?;
+        dir
+    };
     fs::write(
-        PathBuf::from(env::var("OUT_DIR").unwrap_or_default()).join("hitori_macros_debug.rs"),
+        dir.join("macros_debug.rs"),
         RustFmt::default().format_tokens(tokens)?,
     )
     .map_err(Into::into)

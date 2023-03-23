@@ -89,6 +89,7 @@ impl<'a> TryFrom<&'a mut Expr> for Tree<'a> {
 }
 
 pub struct Input<'a> {
+    pub hitori_ident: &'a Ident,
     pub generic_params: &'a mut Punctuated<GenericParam, Token![,]>,
     pub where_clause: Option<&'a WhereClause>,
     pub trait_args: &'a [GenericArgument; 3],
@@ -107,7 +108,10 @@ impl<'a> TryFrom<Input<'a>> for Output {
 
     fn try_from(mut input: Input<'a>) -> syn::Result<Self> {
         let tree = input.expr.try_into()?;
-        let mut st = State::new(&input.trait_args[1], &input.trait_args[2]);
+        let mut st = State::new(StateInput {
+            hitori_ident: input.hitori_ident,
+            trait_args: input.trait_args,
+        });
         let wrapper_impl_body = st.expand_tree(tree)?;
         Ok(if wrapper_impl_body.is_empty() {
             Self {
@@ -127,7 +131,7 @@ impl<'a> TryFrom<Input<'a>> for Output {
                     __phantom: core::marker::PhantomData,
                 };
                 wrapper.#last_subexpr_fn_ident().map(|opt| {
-                    opt.map(|_| wrapper.__end)
+                    opt.map(|_| ..wrapper.__end)
                 })
             });
             st.capture_fn_idents.sort_unstable();
@@ -190,15 +194,16 @@ fn expand_wrapper_header(
     let mut_ = is_mut.then_some(<Token![mut]>::default());
 
     let mut output = quote! {
-       struct __Self<#all_generics_params_with_bounds, __I> #where_clause {
-           __target: &#(#mut_)? #self_path,
-           __capture: &mut #capture_arg,
+       struct __Self<'a, __I, #all_generics_params_with_bounds> #where_clause {
+           __target: &'a #mut_ #self_path,
+           __capture: &'a mut #capture_arg,
            __end: #idx_arg,
            __iter: __I,
            __phantom: core::marker::PhantomData<(#phantom_data_params)>,
        };
 
-       impl<#all_generics_params_with_bounds> core::ops::Deref for __Self<#generic_params>
+       impl<'a, __I, #all_generics_params_with_bounds> core::ops::Deref
+       for __Self<'a, __I, #generic_params>
        #where_clause
        {
            type Target = #self_path;
@@ -211,7 +216,8 @@ fn expand_wrapper_header(
 
     if *is_mut {
         output.extend(quote! {
-            impl<#all_generics_params_with_bounds> core::ops::DerefMut for __Self<#generic_params>
+            impl<'a, __I, #all_generics_params_with_bounds> core::ops::DerefMut
+            for __Self<'a, __I, #generic_params>
             #where_clause
             {
                 fn deref_mut(&mut self) -> &Self::Target {
@@ -222,10 +228,16 @@ fn expand_wrapper_header(
     }
 
     output.extend(quote! {
-        impl<#all_generics_params_with_bounds> __Self<#generic_params> #where_clause
+        impl<'a, __I, #all_generics_params_with_bounds> __Self<'a, __I, #generic_params>
+        #where_clause
     });
 
     output
+}
+
+struct StateInput<'a> {
+    hitori_ident: &'a Ident,
+    trait_args: &'a [GenericArgument; 3],
 }
 
 struct State {
@@ -245,14 +257,25 @@ struct ExpandTreeInnerOutput {
 }
 
 impl State {
-    fn new(idx_arg: &GenericArgument, ch_arg: &GenericArgument) -> Self {
+    fn new(
+        StateInput {
+            hitori_ident,
+            trait_args: [capture_arg, idx_arg, ch_arg],
+        }: StateInput,
+    ) -> Self {
         Self {
             first_fn_arg: parse_quote! { first: (#idx_arg, #ch_arg) },
             returned_last_ty: parse_quote! {
-                core::result::Result<core::option::Option<#ch_arg>>
+                core::result::Result<
+                    core::option::R<#ch_arg>,
+                    <#capture_arg as #hitori_ident::CaptureMut>::Error
+                >
             },
             returned_no_last_ty: parse_quote! {
-                core::result::Result<core::option::Option<()>>
+                core::result::Result<
+                    core::option::Option<()>,
+                    <#capture_arg as #hitori_ident::CaptureMut>::Error
+                >
             },
             subexpr_index: 0,
             returns_last: false,
@@ -315,7 +338,7 @@ impl State {
         if repeat.is_none() {
             let inner_call = self.expand_subexpr_call(has_first);
             body.extend(quote! {
-                let output = #inner_call?;
+                let output = self.#inner_call?;
                 if output.is_none() {
                     return core::result::Result::Ok(output);
                 }
@@ -326,10 +349,12 @@ impl State {
 
         if !capture.is_empty() {
             for f in &capture[..capture.len() - 1] {
-                body.extend(quote! { capture.#f(start.clone()..self.__end.clone())?; });
+                body.extend(quote! {
+                    self.__capture.#f(start.clone()..self.__end.clone())?;
+                });
             }
             let f = capture.last().unwrap();
-            body.extend(quote! { capture.#f(start..self.__end.clone())?; });
+            body.extend(quote! { self.__capture.#f(start..self.__end.clone())?; });
         }
 
         self.set_next_test_ident();
@@ -365,9 +390,16 @@ impl State {
             output.extra.extend(self.expand_tree(expr.try_into()?)?);
             let call = self.expand_subexpr_call(has_first);
             output.body.extend(if self.returns_last {
-                quote! { let first = if let Some(first) = #call? { first } else { return None; } }
+                quote! {
+                    let first = if let Some(first) = self.#call? { first } else { return None; }
+                }
             } else {
-                quote! { if #call?.is_none() { return None } }
+                quote! {
+                    let subexpr_matches = self.#call;
+                    if subexpr_matches.as_ref().map(Option::is_none).unwrap_or_default() {
+                        return subexpr_matches
+                    }
+                }
             });
         }
         Ok(output)
@@ -409,7 +441,7 @@ impl State {
         let test_ident = &self.last_subexpr_fn_ident;
         let first = has_first.then_some(&self.first_fn_arg);
         let mut output = quote! {
-            fn #test_ident(&mut self, #(#first)?) ->
+            fn #test_ident(&mut self, #first) ->
         };
         if self.returns_last {
             &self.returned_last_ty
@@ -424,7 +456,7 @@ impl State {
         let test_ident = &self.last_subexpr_fn_ident;
         let first = has_first.then_some(&self.first_fn_arg);
         quote! {
-            #test_ident(self, #(#first)?)
+            #test_ident(#first)
         }
     }
 }

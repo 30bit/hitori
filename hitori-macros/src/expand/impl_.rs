@@ -75,9 +75,11 @@ fn expand_expr_mut_from_expr(input: &Input) -> TokenStream {
     let matches_sig = matches_sig(input.hitori_ident, input.trait_args, true);
     let mut output = expand_header(&input);
     let hitori_ident = input.hitori_ident;
-    output.extend(quote! {
-        #matches_sig { <Self as #hitori_ident::Expr>::matches(self, capture, start, iter) }
-    });
+    output.extend(quote! {{
+        #matches_sig {
+            <Self as #hitori_ident::Expr<_, _, _>>::matches(self, capture, start, iter)
+        }
+    }});
     output
 }
 
@@ -87,8 +89,9 @@ pub struct Output {
 }
 
 fn expand_with_matches_block(input: &mut Input) -> syn::Result<Output> {
-    let mut output_tokens = expand_header(&input);
+    let mut header = expand_header(&input);
     matches_block::Input {
+        hitori_ident: input.hitori_ident,
         generic_params: input.generic_params,
         where_clause: input.where_clause,
         trait_args: input.trait_args,
@@ -97,18 +100,23 @@ fn expand_with_matches_block(input: &mut Input) -> syn::Result<Output> {
         is_mut: matches!(input.config, Config::ExprMut),
     }
     .try_into()
-    .map(|matches_block::Output { tokens, capture }| {
-        let matches_sig = matches_sig(
-            input.hitori_ident,
-            input.trait_args,
-            matches!(input.config, Config::ExprMut),
-        );
-        output_tokens.extend(quote! { #matches_sig { #tokens } });
-        Output {
-            tokens: output_tokens,
-            capture_fn_idents: capture,
-        }
-    })
+    .map(
+        |matches_block::Output {
+             tokens: matches_block,
+             capture,
+         }| {
+            let matches_sig = matches_sig(
+                input.hitori_ident,
+                input.trait_args,
+                matches!(input.config, Config::ExprMut),
+            );
+            header.extend(quote! { { #matches_sig { #matches_block } } });
+            Output {
+                tokens: header,
+                capture_fn_idents: capture,
+            }
+        },
+    )
 }
 
 impl<'a> TryFrom<Input<'a>> for Output {
