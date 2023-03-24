@@ -2,12 +2,11 @@ use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote, ToTokens};
 use syn::{
     parse::Parse, parse_quote, punctuated::Punctuated, Expr, ExprRange, FnArg, GenericArgument,
-    GenericParam, Path, Token, Type, WhereClause,
+    GenericParam, LifetimeDef, Path, Token, Type, WhereClause,
 };
 
 use crate::utils::{
-    collect_hitori_attrs, expand_lifetime_generic_params_into_unit_refs, find_unique_hitori_attr,
-    remove_generic_params_bounds, take_hitori_attrs,
+    collect_hitori_attrs, find_unique_hitori_attr, remove_generic_params_bounds, take_hitori_attrs,
 };
 
 enum Repeat {
@@ -144,6 +143,17 @@ impl<'a> TryFrom<Input<'a>> for Output {
     }
 }
 
+fn expand_lifetime_generic_params_into_punctuated_unit_refs<'a, I>(iter: I) -> TokenStream
+where
+    I: IntoIterator<Item = &'a LifetimeDef>,
+{
+    let mut output = TokenStream::new();
+    for LifetimeDef { lifetime, .. } in iter {
+        output.extend(quote! { & #lifetime (), });
+    }
+    output
+}
+
 fn expand_wrapper_header(
     Input {
         self_path,
@@ -156,7 +166,7 @@ fn expand_wrapper_header(
 ) -> TokenStream {
     let all_generics_params_with_bounds = quote! { #generic_params };
 
-    let mut phantom_data_params = expand_lifetime_generic_params_into_unit_refs(
+    let mut phantom_data_params = expand_lifetime_generic_params_into_punctuated_unit_refs(
         generic_params
             .iter()
             .take_while(|param| matches!(param, GenericParam::Lifetime(_)))
@@ -168,9 +178,9 @@ fn expand_wrapper_header(
 
     remove_generic_params_bounds(generic_params);
 
-    for param in generic_params.iter() {
-        if !matches!(param, GenericParam::Const(_)) {
-            param.to_tokens(&mut phantom_data_params);
+    for pair in generic_params.pairs() {
+        if !matches!(pair.value(), GenericParam::Const(_)) {
+            pair.to_tokens(&mut phantom_data_params);
         }
     }
 

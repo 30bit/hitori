@@ -73,7 +73,7 @@ fn expand_header(
 
 fn expand_expr_mut_from_expr(input: &Input) -> TokenStream {
     let matches_sig = matches_sig(input.hitori_ident, input.trait_args, true);
-    let mut output = expand_header(&input);
+    let mut output = expand_header(input);
     let hitori_ident = input.hitori_ident;
     output.extend(quote! {{
         #matches_sig {
@@ -89,7 +89,7 @@ pub struct Output {
 }
 
 fn expand_with_matches_block(input: &mut Input) -> syn::Result<Output> {
-    let mut header = expand_header(&input);
+    let mut header = expand_header(input);
     matches_block::Input {
         hitori_ident: input.hitori_ident,
         generic_params: input.generic_params,
