@@ -1,11 +1,11 @@
 [package]
 name = "hitori-macros"
-version = "0.1.0"
-authors = ["Artur Helmanau <m30bit@gmail.com>"]
 description = "Macros for hitori"
-edition = "2021"
-license = "MIT OR Apache-2.0"
-repository = "https://github.com/30bit/hitori"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
 
 [lib]
 proc-macro = true

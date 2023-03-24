@@ -8,10 +8,10 @@ impl<C: ScoreCaptureMut> Expr<C, usize, char> for Score {
     const PATTERN: _ = (
         // this calls `ScoreCaptureMut::left` on matched range
         #[hitori::capture(left)]
-        (|ch: char| ch.is_digit(10)),
+        (|ch: char| ch.is_ascii_digit()),
         |ch| ch == ':',
         // this calls `ScoreCaptureMut::right` on matched range
         #[hitori::capture(right)]
-        (|ch: char| ch.is_digit(10)),
+        (|ch: char| ch.is_ascii_digit()),
     );
 }
