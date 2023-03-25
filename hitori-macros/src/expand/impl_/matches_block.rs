@@ -1,7 +1,7 @@
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote, ToTokens};
 use syn::{
-    parse::Parse, parse_quote, punctuated::Punctuated, Expr, ExprRange, FnArg, GenericArgument,
+    parse::Parse, parse_quote, punctuated::Punctuated, Expr, ExprRange, GenericArgument,
     GenericParam, LifetimeDef, Path, Token, Type, WhereClause,
 };
 
@@ -41,16 +41,6 @@ impl Parse for Repeat {
                 }
             }
         })
-    }
-}
-
-impl Repeat {
-    fn has_upper_bound(&self) -> bool {
-        match self {
-            Repeat::Exact(_) => true,
-            Repeat::Range(range) => range.to.is_some(),
-            _ => false,
-        }
     }
 }
 
@@ -107,10 +97,7 @@ impl<'a> TryFrom<Input<'a>> for Output {
 
     fn try_from(mut input: Input<'a>) -> syn::Result<Self> {
         let tree = input.expr.try_into()?;
-        let mut st = State::new(StateInput {
-            hitori_ident: input.hitori_ident,
-            trait_args: input.trait_args,
-        });
+        let mut st = State::new(input.hitori_ident, &input.trait_args[0]);
         let wrapper_impl_body = st.expand_tree(tree)?;
         Ok(if wrapper_impl_body.is_empty() {
             Self {
@@ -129,8 +116,12 @@ impl<'a> TryFrom<Input<'a>> for Output {
                     __iter: iter.into_iter(),
                     __phantom: core::marker::PhantomData,
                 };
-                wrapper.#last_subexpr_fn_ident().map(|opt| {
-                    opt.map(|_| ..wrapper.__end)
+                wrapper.#last_subexpr_fn_ident().map(|matches| {
+                    if matches {
+                        Some(..wrapper.__end)
+                    } else {
+                        None
+                    }
                 })
             });
             st.capture_fn_idents.sort_unstable();
@@ -245,17 +236,9 @@ fn expand_wrapper_header(
     output
 }
 
-struct StateInput<'a> {
-    hitori_ident: &'a Ident,
-    trait_args: &'a [GenericArgument; 3],
-}
-
 struct State {
-    first_fn_arg: FnArg,
-    returned_last_ty: Type,
-    returned_no_last_ty: Type,
+    returned_ty: Type,
     subexpr_index: usize,
-    returns_last: bool,
     last_subexpr_fn_ident: Option<Ident>,
     capture_fn_idents: Vec<Ident>,
 }
@@ -267,34 +250,21 @@ struct ExpandTreeInnerOutput {
 }
 
 impl State {
-    fn new(
-        StateInput {
-            hitori_ident,
-            trait_args: [capture_arg, idx_arg, ch_arg],
-        }: StateInput,
-    ) -> Self {
+    fn new(hitori_ident: &Ident, capture_arg: &GenericArgument) -> Self {
         Self {
-            first_fn_arg: parse_quote! { first: (#idx_arg, #ch_arg) },
-            returned_last_ty: parse_quote! {
+            returned_ty: parse_quote! {
                 core::result::Result<
-                    core::option::R<#ch_arg>,
-                    <#capture_arg as #hitori_ident::CaptureMut>::Error
-                >
-            },
-            returned_no_last_ty: parse_quote! {
-                core::result::Result<
-                    core::option::Option<()>,
+                    bool,
                     <#capture_arg as #hitori_ident::CaptureMut>::Error
                 >
             },
             subexpr_index: 0,
-            returns_last: false,
             last_subexpr_fn_ident: None,
             capture_fn_idents: Vec::with_capacity(64),
         }
     }
 
-    fn set_next_test_ident(&mut self) {
+    fn set_next_subexpr_fn_ident(&mut self) {
         self.last_subexpr_fn_ident = Some(format_ident!("__subexpr{}", self.subexpr_index));
         self.subexpr_index += 1;
     }
@@ -307,33 +277,17 @@ impl State {
             mut capture,
         }: Tree,
     ) -> syn::Result<TokenStream> {
-        let has_first = self.returns_last;
-        let is_test = matches!(inner, TreeInner::Test(_));
-
         let ExpandTreeInnerOutput {
             extra: mut output,
             body: inner_body,
         } = self.expand_tree_inner(inner)?;
 
-        let inner_returns_last = !is_test && self.returns_last;
-        let inner_return_value = if inner_returns_last {
-            quote! { first }
-        } else {
-            self.returns_last = false;
-            quote! { () }
-        };
-
-        self.set_next_test_ident();
-        output.extend(self.expand_subexpr_sig(has_first));
+        self.set_next_subexpr_fn_ident();
+        output.extend(self.expand_subexpr_sig());
         output.extend(quote! {{
             #inner_body
-            core::result::Result::Ok(core::option::Option::Some(#inner_return_value))
+            core::result::Result::Ok(true)
         }});
-
-        self.returns_last = repeat
-            .as_ref()
-            .map(|repeat| !repeat.has_upper_bound())
-            .unwrap_or(inner_returns_last);
 
         if capture.is_empty() && repeat.is_none() {
             return Ok(output);
@@ -346,11 +300,10 @@ impl State {
         };
 
         if repeat.is_none() {
-            let inner_call = self.expand_subexpr_call(has_first);
+            let inner_call = self.expand_subexpr_call();
             body.extend(quote! {
-                let output = self.#inner_call?;
-                if output.is_none() {
-                    return core::result::Result::Ok(output);
+                if !self.#inner_call? {
+                    return core::result::Result::Ok(false);
                 }
             })
         } else {
@@ -367,18 +320,13 @@ impl State {
             body.extend(quote! { self.__capture.#f(start..self.__end.clone())?; });
         }
 
-        self.set_next_test_ident();
-        output.extend(self.expand_subexpr_sig(has_first));
+        self.set_next_subexpr_fn_ident();
+        output.extend(self.expand_subexpr_sig());
 
-        if repeat.is_none() {
-            body.extend(quote! {
-                core::result::Result::Ok(output)
-            });
-        } else {
-            unimplemented!();
-        }
-
-        output.extend(quote! { { #body } });
+        output.extend(quote! {{
+            #body
+            core::result::Result::Ok(true)
+        }});
 
         self.capture_fn_idents.append(&mut capture);
 
@@ -396,19 +344,13 @@ impl State {
     fn expand_tree_inner_all(&mut self, group: Group) -> syn::Result<ExpandTreeInnerOutput> {
         let mut output = ExpandTreeInnerOutput::default();
         for expr in group {
-            let has_first = self.returns_last;
             output.extra.extend(self.expand_tree(expr.try_into()?)?);
-            let call = self.expand_subexpr_call(has_first);
-            output.body.extend(if self.returns_last {
-                quote! {
-                    let first = if let Some(first) = self.#call? { first } else { return None; }
-                }
-            } else {
-                quote! {
-                    let subexpr_matches = self.#call;
-                    if subexpr_matches.as_ref().map(Option::is_none).unwrap_or_default() {
-                        return subexpr_matches
-                    }
+            let call = self.expand_subexpr_call();
+            output.body.extend(quote! {
+                let subexpr_matches = self.#call;
+                match &subexpr_matches {
+                    Ok(true) => (),
+                    _ => return subexpr_matches,
                 }
             });
         }
@@ -423,23 +365,19 @@ impl State {
     }
 
     fn expand_tree_inner_test(&self, expr: &Expr) -> ExpandTreeInnerOutput {
-        let mut body = if self.returns_last {
-            TokenStream::default()
-        } else {
-            quote! {
-                let first = if let Some(first) = self.__iter.next() {
-                    first
-                } else {
-                    return core::result::Result::Ok(core::option::Option::None);
-                };
-            }
+        let mut body = quote! {
+            let first = if let Some(first) = self.__iter.next() {
+                first
+            } else {
+                return core::result::Result::Ok(false);
+            };
         };
         body.extend(quote! {
             if (#expr)(first.1) {
-                self.__end = first.0
+                self.__end = first.0;
             } else {
-                return core::result::Result::Ok(core::option::Option::None);
-            };
+                return core::result::Result::Ok(false)
+            }
         });
         ExpandTreeInnerOutput {
             body,
@@ -447,26 +385,18 @@ impl State {
         }
     }
 
-    fn expand_subexpr_sig(&self, has_first: bool) -> TokenStream {
+    fn expand_subexpr_sig(&self) -> TokenStream {
         let test_ident = &self.last_subexpr_fn_ident;
-        let first = has_first.then_some(&self.first_fn_arg);
-        let mut output = quote! {
-            fn #test_ident(&mut self, #first) ->
-        };
-        if self.returns_last {
-            &self.returned_last_ty
-        } else {
-            &self.returned_no_last_ty
+        let returned_ty = &self.returned_ty;
+        quote! {
+            fn #test_ident(&mut self) -> #returned_ty
         }
-        .to_tokens(&mut output);
-        output
     }
 
-    fn expand_subexpr_call(&self, has_first: bool) -> TokenStream {
+    fn expand_subexpr_call(&self) -> TokenStream {
         let test_ident = &self.last_subexpr_fn_ident;
-        let first = has_first.then_some(&self.first_fn_arg);
         quote! {
-            #test_ident(#first)
+            #test_ident()
         }
     }
 }
