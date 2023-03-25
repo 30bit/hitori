@@ -2,8 +2,8 @@ use crate as hitori;
 pub struct Score;
 
 #[hitori::impl_expr(and_expr_mut)]
-// this defines `ScoreCaptureMut` and `ScoreCaptureRanges`
-#[hitori::and_define(capture_mut, capture_ranges)]
+// this defines `ScoreCaptureMut`, `ScoreCapture` and `ScoreCaptureRanges`
+#[hitori::and_define(capture_mut, capture, capture_ranges)]
 impl<C: ScoreCaptureMut> Expr<C, usize, char> for Score {
     const PATTERN: _ = (
         // this calls `ScoreCaptureMut::left` on matched range

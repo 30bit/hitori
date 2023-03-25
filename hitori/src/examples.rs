@@ -11,8 +11,8 @@
 #![doc = include_example!("all_patterns")]
 //! ```
 //!
-//! # Any-pattens (coming soon)
-//! ```compile_fail
+//! # Any-pattens
+//! ```
 #![doc = include_example!("any_patterns")]
 //! ```
 //!
@@ -25,9 +25,11 @@
 //! [`impl_expr_mut`]: hitori_macros::impl_expr
 
 mod all_patterns;
+mod any_patterns;
 mod capturing;
 
 pub use all_patterns::*;
+pub use any_patterns::*;
 pub use capturing::*;
 
 macro_rules! include_example {

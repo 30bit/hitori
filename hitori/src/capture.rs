@@ -7,7 +7,7 @@ pub trait CaptureMut {
 }
 
 pub trait Capture: CaptureMut {
-    fn clear(&self) {}
+    fn clear(&self);
 }
 
 macro_rules! impl_mut_for_mut {
@@ -60,4 +60,6 @@ impl CaptureMut for () {
     fn clear(&mut self) {}
 }
 
-impl Capture for () {}
+impl Capture for () {
+    fn clear(&self) {}
+}
