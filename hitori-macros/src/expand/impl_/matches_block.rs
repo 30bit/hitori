@@ -238,6 +238,7 @@ fn expand_wrapper_header(
 
 struct State {
     returned_ty: Type,
+    capture_clear_call: Expr,
     subexpr_index: usize,
     last_subexpr_fn_ident: Option<Ident>,
     capture_fn_idents: Vec<Ident>,
@@ -257,6 +258,9 @@ impl State {
                     bool,
                     <#capture_arg as #hitori_ident::CaptureMut>::Error
                 >
+            },
+            capture_clear_call: parse_quote! {
+                <#capture_arg as #hitori_ident::CaptureMut>::clear(self.__capture)
             },
             subexpr_index: 0,
             last_subexpr_fn_ident: None,
@@ -284,10 +288,7 @@ impl State {
 
         self.set_next_subexpr_fn_ident();
         output.extend(self.expand_subexpr_sig());
-        output.extend(quote! {{
-            #inner_body
-            core::result::Result::Ok(true)
-        }});
+        output.extend(quote! {{ #inner_body }});
 
         if capture.is_empty() && repeat.is_none() {
             return Ok(output);
@@ -302,8 +303,10 @@ impl State {
         if repeat.is_none() {
             let inner_call = self.expand_subexpr_call();
             body.extend(quote! {
-                if !self.#inner_call? {
-                    return core::result::Result::Ok(false);
+                let matches = self.#inner_call;
+                match &matches {
+                    Ok(true) => (),
+                    _ => return matches,
                 }
             })
         } else {
@@ -347,21 +350,69 @@ impl State {
             output.extra.extend(self.expand_tree(expr.try_into()?)?);
             let call = self.expand_subexpr_call();
             output.body.extend(quote! {
-                let subexpr_matches = self.#call;
-                match &subexpr_matches {
+                let matches = self.#call;
+                match &matches {
                     Ok(true) => (),
-                    _ => return subexpr_matches,
+                    _ => return matches,
                 }
             });
         }
+        output.body.extend(quote! {
+            core::result::Result::Ok(true)
+        });
         Ok(output)
     }
 
     fn expand_tree_inner_any(&mut self, group: Group) -> syn::Result<ExpandTreeInnerOutput> {
-        Err(syn::Error::new_spanned(
-            group,
-            "any-patterns are not implemented yet",
-        ))
+        let mut output = ExpandTreeInnerOutput::default();
+        if group.len() > 1 {
+            output.body.extend(quote! {
+                let cloned_iter = self.__iter.clone();
+            });
+        }
+
+        macro_rules! expand_branch {
+            ($expr:expr, $reset:expr) => {{
+                output.extra.extend(self.expand_tree($expr.try_into()?)?);
+                let call = self.expand_subexpr_call();
+                let reset = $reset;
+                output.body.extend(quote! {
+                    let matches = self.#call;
+                    match &matches {
+                        Ok(true) => return matches,
+                        _ => #reset,
+                    }
+                });
+            }};
+        }
+
+        let group_len = group.len();
+        if group_len > 2 {
+            let capture_clear_call = &self.capture_clear_call;
+            let reset = quote! {{
+                self.__iter = cloned_iter.clone();
+                #capture_clear_call;
+            }};
+            for expr in group.iter_mut().take(group_len - 2) {
+                expand_branch!(expr, &reset);
+            }
+        }
+        if group_len > 1 {
+            let capture_clear_call = &self.capture_clear_call;
+            let reset = quote! {{
+                self.__iter = cloned_iter;
+                #capture_clear_call;
+            }};
+            expand_branch!(&mut group[group_len - 2], reset);
+        }
+        if group_len == 0 {
+            output
+                .body
+                .extend(quote! { core::result::Result::Ok(false) });
+        } else {
+            expand_branch!(&mut group[group_len - 1], quote! { return matches });
+        }
+        Ok(output)
     }
 
     fn expand_tree_inner_test(&self, expr: &Expr) -> ExpandTreeInnerOutput {
@@ -373,11 +424,12 @@ impl State {
             };
         };
         body.extend(quote! {
-            if (#expr)(first.1) {
+            core::result::Result::Ok(if (#expr)(first.1) {
                 self.__end = first.0;
+                true
             } else {
-                return core::result::Result::Ok(false)
-            }
+                false
+            })
         });
         ExpandTreeInnerOutput {
             body,

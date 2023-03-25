@@ -12,7 +12,7 @@
 //! ```
 //!
 //! # Any-pattens (coming soon)
-//! ```compile_fail
+//! ```
 #![doc = include_example!("any_patterns")]
 //! ```
 //!
