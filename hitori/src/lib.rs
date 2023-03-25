@@ -70,7 +70,7 @@ core::compile_error!(
 #[cfg(feature = "box")]
 extern crate alloc;
 
-#[cfg(all(feature = "box", feature = "macros", not(feature = "find_hitori")))]
+#[cfg(all(doc, feature = "box", feature = "macros", not(feature = "find_hitori")))]
 #[cfg_attr(doc, doc(cfg(doc)))]
 pub mod examples;
 pub mod string;
