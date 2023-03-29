@@ -7,7 +7,7 @@ use syn::{
 };
 
 pub struct Args {
-    pub vis: Option<Visibility>,
+    pub capture_vis: Option<Visibility>,
     pub capture_ident: Option<Ident>,
 }
 
@@ -43,7 +43,10 @@ impl TryFrom<Punctuated<Meta, Token![,]>> for Args {
             }
         }
 
-        Ok(Self { vis, capture_ident: capture })
+        Ok(Self {
+            capture_vis: vis,
+            capture_ident: capture,
+        })
     }
 }
 

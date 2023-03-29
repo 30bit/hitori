@@ -1,21 +1,22 @@
 mod args;
 
-use crate::utils::{eq_by_fmt, type_path_ref};
+use crate::utils::{
+    eq_by_fmt, generic_arg_try_into_type, has_type_any_generic_params, type_path_ref,
+};
 use args::Args;
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, ToTokens as _};
-use std::array;
 use syn::{
     parse2,
     punctuated::{self, Punctuated},
     token::Bang,
-    Expr, GenericArgument, GenericParam, ImplItem, ImplItemConst, ItemImpl, Path, PathArguments,
-    PathSegment, Token, Type, TypePath, VisPublic, Visibility, WhereClause,
+    Expr, GenericParam, ImplItem, ImplItemConst, ItemImpl, Path, PathArguments, PathSegment, Token,
+    Type, TypeParam, TypePath, VisPublic, Visibility, WhereClause,
 };
 
 fn trait_ident_and_args(
     (_, mut path, _): (Option<Bang>, Path, Token![for]),
-) -> syn::Result<(Ident, Punctuated<GenericArgument, Token![,]>)> {
+) -> syn::Result<(Ident, [Type; 2])> {
     Err(
         if path.segments.len() != 1 || path.leading_colon.is_some() {
             syn::Error::new_spanned(path, "expected ident")
@@ -26,7 +27,10 @@ fn trait_ident_and_args(
             match arguments {
                 PathArguments::AngleBracketed(args) => {
                     if args.args.len() == 2 {
-                        return Ok((ident, args.args));
+                        let mut args = args.args.into_iter();
+                        let idx_arg = generic_arg_try_into_type(args.next().unwrap())?;
+                        let ch_arg = generic_arg_try_into_type(args.next().unwrap())?;
+                        return Ok((ident, [idx_arg, ch_arg]));
                     } else {
                         syn::Error::new_spanned(args, "expected 2 arguments")
                     }
@@ -92,19 +96,37 @@ fn const_expr(items: Vec<ImplItem>) -> syn::Result<Expr> {
 
 pub struct Output {
     pub is_mut: bool,
-    pub vis: Visibility,
+    pub capture_vis: Visibility,
     pub capture_ident: Ident,
-    pub generic_params: Punctuated<GenericParam, Token![,]>,
-    pub where_clause: Option<WhereClause>,
+    pub capture_idx_ident: Ident,
     pub self_ty: Box<Type>,
     pub trait_ident: Ident,
-    pub trait_args: [GenericArgument; 2],
+    pub idx_ty: Type,
+    pub is_idx_generic: bool,
+    pub ch_ty: Type,
+    pub iter_ident: Ident,
     pub const_expr: Expr,
+    pub generic_params: Punctuated<GenericParam, Token![,]>,
+    pub where_clause: Option<WhereClause>,
 }
 
 impl Output {
     fn new(is_mut: bool, args: Args, item: ItemImpl) -> syn::Result<Self> {
-        let (trait_ident, trait_args) = trait_ident_and_args(
+        let iter_ident = {
+            let mut iter_ident_string = String::with_capacity(2);
+            iter_ident_string.push('I');
+
+            while item.generics.params.iter().any(|param| match param {
+                GenericParam::Type(TypeParam { ident, .. }) => ident == &iter_ident_string,
+                _ => false,
+            }) {
+                iter_ident_string.push('_');
+            }
+
+            format_ident!("{iter_ident_string}")
+        };
+
+        let (trait_ident, [idx_ty, ch_ty]) = trait_ident_and_args(
             item.trait_
                 .ok_or_else(|| syn::Error::new_spanned(&item.self_ty, "not a trait impl"))?,
         )?;
@@ -116,6 +138,14 @@ impl Output {
         } else if trait_ident != "Expr" {
             return Err(syn::Error::new_spanned(trait_ident, "not `Expr`"));
         }
+
+        let is_idx_generic = has_type_any_generic_params(&item.generics.params, &idx_ty);
+
+        let vis = args.capture_vis.unwrap_or_else(|| {
+            Visibility::Public(VisPublic {
+                pub_token: Default::default(),
+            })
+        });
 
         let capture_ident = if let Some(ident) = args.capture_ident {
             ident
@@ -132,25 +162,31 @@ impl Output {
             }
         };
 
-        let vis = args.vis.unwrap_or_else(|| {
-            Visibility::Public(VisPublic {
-                pub_token: Default::default(),
-            })
-        });
+        let capture_idx_ident = if is_idx_generic
+            && type_path_ref(&idx_ty)
+                .and_then(|type_path| type_path.path.get_ident())
+                .map(|idx_ident| idx_ident == "Idx")
+                .unwrap_or_default()
+        {
+            format_ident!("Idx_")
+        } else {
+            format_ident!("Idx")
+        };
 
         const_expr(item.items).map(|const_expr| Output {
             is_mut,
-            vis,
+            capture_vis: vis,
             capture_ident,
-            generic_params: item.generics.params,
-            where_clause: item.generics.where_clause,
+            capture_idx_ident,
             self_ty: item.self_ty,
             trait_ident,
-            trait_args: {
-                let mut trait_args_iter = trait_args.into_iter();
-                array::from_fn(|_| trait_args_iter.next().unwrap())
-            },
+            iter_ident,
+            idx_ty,
+            is_idx_generic,
+            ch_ty,
             const_expr,
+            generic_params: item.generics.params,
+            where_clause: item.generics.where_clause,
         })
     }
 }

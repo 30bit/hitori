@@ -1,17 +1,37 @@
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
-use syn::{GenericArgument, Visibility};
+use syn::{Type, Visibility};
 
 pub struct Field {
-    ident: Ident,
-    max_set_count: usize,
+    pub ident: Ident,
+    pub max_set_count: usize,
 }
 
-pub fn capture<'a>(
+impl PartialEq for Field {
+    fn eq(&self, other: &Self) -> bool {
+        self.ident == other.ident
+    }
+}
+
+impl Eq for Field {}
+
+impl PartialOrd for Field {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.ident.partial_cmp(&other.ident)
+    }
+}
+
+impl Ord for Field {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.ident.cmp(&other.ident)
+    }
+}
+
+pub fn options<'a>(
     vis: &Visibility,
     ident: &Ident,
     idx_ident: &Ident,
-    idx_default_arg: Option<GenericArgument>,
+    default_idx_ty: Option<&Type>,
     field_idents: impl Iterator<Item = &'a Ident> + Clone,
 ) -> TokenStream {
     let field_idents_clone = field_idents.clone();
@@ -22,7 +42,7 @@ pub fn capture<'a>(
             core::cmp::PartialEq,
             core::fmt::Debug,
         )]
-        #vis struct #ident<#idx_ident = #idx_default_arg> {
+        #vis struct #ident<#idx_ident = #default_idx_ty> {
             #(
                 #field_idents: core::option::Option<core::ops::Range<#idx_ident>>,
             )*
@@ -40,7 +60,7 @@ pub fn capture<'a>(
     }
 }
 
-pub fn capture_vecs<'a>(
+pub fn vecs<'a>(
     hitori_ident: &Ident,
     fields: impl Iterator<Item = &'a Field> + Clone,
 ) -> TokenStream {

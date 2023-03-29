@@ -104,6 +104,16 @@ pub fn path_eq_ident_str(path: &Path, ident_str: &str) -> bool {
         .unwrap_or_default()
 }
 
+pub fn generic_arg_try_into_type(arg: GenericArgument) -> syn::Result<Type> {
+    match &arg {
+        GenericArgument::Type(ty) => match arg {
+            GenericArgument::Type(ty) => Ok(ty),
+            _ => unreachable!(),
+        },
+        _ => Err(syn::Error::new_spanned(arg, "expected type")),
+    }
+}
+
 pub fn type_path_ref(ty: &Type) -> Option<&TypePath> {
     macro_rules! next {
         ($ty:expr) => {
