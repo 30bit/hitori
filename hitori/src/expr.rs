@@ -1,33 +1,16 @@
-use crate::capture::CaptureMut;
 use core::ops::RangeTo;
 
-pub trait ExprMut<C, Idx, Ch>
-where
-    C: CaptureMut,
-    Idx: Clone,
-{
-    fn matches<I>(
-        &mut self,
-        capture: &mut C,
-        start: Idx,
-        iter: I,
-    ) -> Result<Option<RangeTo<Idx>>, <C as CaptureMut>::Error>
+pub trait ExprMut<Idx, Ch> {
+    type Capture;
+
+    fn matches_mut<I>(&mut self, start: Idx, iter: I) -> Option<(RangeTo<Idx>, Self::Capture)>
     where
         I: IntoIterator<Item = (Idx, Ch)>,
         I::IntoIter: Clone;
 }
 
-pub trait Expr<C, Idx, Ch>: ExprMut<C, Idx, Ch>
-where
-    C: CaptureMut,
-    Idx: Clone,
-{
-    fn matches<I>(
-        &self,
-        capture: &mut C,
-        start: Idx,
-        iter: I,
-    ) -> Result<Option<RangeTo<Idx>>, <C as CaptureMut>::Error>
+pub trait Expr<Idx, Ch>: ExprMut<Idx, Ch> {
+    fn matches<I>(&self, start: Idx, iter: I) -> Option<(RangeTo<Idx>, Self::Capture)>
     where
         I: IntoIterator<Item = (Idx, Ch)>,
         I::IntoIter: Clone;
@@ -35,24 +18,20 @@ where
 
 macro_rules! impl_mut_for_mut {
     ($ty:ty) => {
-        impl<'a, C, Idx, Ch, E> ExprMut<C, Idx, Ch> for $ty
-        where
-            C: CaptureMut,
-            Idx: Clone,
-            E: ExprMut<C, Idx, Ch>,
-        {
+        impl<'a, Idx, Ch, E: ExprMut<Idx, Ch>> ExprMut<Idx, Ch> for $ty {
+            type Capture = E::Capture;
+
             #[inline]
-            fn matches<I>(
+            fn matches_mut<I>(
                 &mut self,
-                capture: &mut C,
                 start: Idx,
                 iter: I,
-            ) -> Result<Option<RangeTo<Idx>>, <C as CaptureMut>::Error>
+            ) -> Option<(RangeTo<Idx>, Self::Capture)>
             where
                 I: IntoIterator<Item = (Idx, Ch)>,
                 I::IntoIter: Clone,
             {
-                E::matches(self, capture, start, iter)
+                E::matches_mut(self, start, iter)
             }
         }
     };
@@ -65,32 +44,29 @@ impl_mut_for_mut!(&mut E);
 impl_mut_for_mut!(alloc::boxed::Box<E>);
 
 macro_rules! impl_for_const {
-    ($ty:ty: $trait:ident$(($mut:ident))?) => {
-        impl<'a, C, Idx, Ch, E> $trait<C, Idx, Ch> for $ty
-        where
-            C: CaptureMut,
-            Idx: Clone,
-            E: Expr<C, Idx, Ch>,
-        {
+    ($ty:ty: ExprMut) => {
+        impl_for_const!($ty: ExprMut::matches_mut(mut, Capture));
+    };
+    ($ty:ty: Expr) => {
+        impl_for_const!($ty: Expr::matches);
+    };
+    ($ty:ty: $trait:ident::$matches:ident$(($mut:ident, $capture:ident))?) => {
+        impl<'a, Idx, Ch, E: Expr<Idx, Ch>> $trait<Idx, Ch> for $ty {
+            $(type $capture = E::Capture;)?
+
             #[inline]
-            fn matches<I>(
-                &$($mut )?self,
-                capture: &mut C,
-                start: Idx,
-                iter: I,
-            ) -> Result<Option<RangeTo<Idx>>, <C as CaptureMut>::Error>
+            fn $matches<I>(&$($mut)?self, start: Idx, iter: I) -> Option<(RangeTo<Idx>, Self::Capture)>
             where
-                Idx: Clone,
                 I: IntoIterator<Item = (Idx, Ch)>,
                 I::IntoIter: Clone,
             {
-                <E as Expr<C, Idx, Ch>>::matches(self, capture, start, iter)
+                E::matches(self, start, iter)
             }
         }
     };
 }
 
-impl_for_const!(&E: ExprMut(mut));
+impl_for_const!(&E: ExprMut);
 
 impl_for_const!(&E: Expr);
 

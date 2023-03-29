@@ -2,7 +2,7 @@ use crate as hitori;
 pub struct OhNo;
 
 #[hitori::impl_expr(and_expr_mut)]
-impl Expr<(), usize, char> for OhNo {
+impl Expr<usize, char> for OhNo {
     const PATTERN: _ =
         // this is an all-pattern
         (

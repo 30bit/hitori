@@ -2,7 +2,7 @@ use crate as hitori;
 pub struct Scream;
 
 #[hitori::impl_expr(and_expr_mut)]
-impl Expr<(), usize, char> for Scream {
+impl Expr<usize, char> for Scream {
     const PATTERN: _ = (
         // this repeats zero or more times
         #[hitori::repeat(+)]

@@ -1,4 +1,4 @@
-use crate::{generic, CaptureMut, ExprMut};
+use crate::{expr::ExprMut, generic};
 use core::{
     mem,
     ops::{Range, RangeTo},
@@ -37,40 +37,18 @@ impl<'a> Iterator for CharEnds<'a> {
     }
 }
 
-pub fn matches<E, C>(
-    expr: E,
-    capture: C,
-    s: &str,
-) -> Result<Option<RangeTo<usize>>, <C as CaptureMut>::Error>
+#[inline]
+pub fn matches<E>(expr: E, s: &str) -> Option<(RangeTo<usize>, E::Capture)>
 where
-    E: ExprMut<C, usize, char>,
-    C: CaptureMut,
+    E: ExprMut<usize, char>,
 {
-    generic::matches(expr, capture, 0, CharEnds::from(s))
+    generic::matches(expr, 0, CharEnds::from(s))
 }
 
-pub fn matches_no_capture<E>(s: &str, expr: E) -> Option<RangeTo<usize>>
+#[inline]
+pub fn find<E>(expr: E, s: &str) -> Option<(Range<usize>, E::Capture)>
 where
-    E: ExprMut<(), usize, char>,
+    E: ExprMut<usize, char>,
 {
-    generic::matches_no_capture(expr, 0, CharEnds::from(s))
-}
-
-pub fn find<E, C>(
-    expr: E,
-    capture: C,
-    s: &str,
-) -> Result<Option<Range<usize>>, <C as CaptureMut>::Error>
-where
-    E: ExprMut<C, usize, char>,
-    C: CaptureMut,
-{
-    generic::find(expr, capture, 0, CharEnds::from(s))
-}
-
-pub fn find_no_capture<E>(expr: E, s: &str) -> Option<Range<usize>>
-where
-    E: ExprMut<(), usize, char>,
-{
-    generic::find_no_capture(expr, 0, CharEnds::from(s))
+    generic::find(expr, 0, CharEnds::from(s))
 }

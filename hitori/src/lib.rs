@@ -70,16 +70,16 @@ core::compile_error!(
 #[cfg(feature = "box")]
 extern crate alloc;
 
-#[cfg(all(doc, feature = "box", feature = "macros", not(feature = "find_hitori")))]
+#[cfg(all(feature = "box", feature = "macros", not(feature = "find_hitori")))]
 #[cfg_attr(doc, doc(cfg(doc)))]
 pub mod examples;
 pub mod string;
 
-mod capture;
 mod expr;
 mod generic;
 
-pub use generic::{find, find_no_capture, matches, matches_no_capture};
+pub use expr::{Expr, ExprMut};
+pub use generic::{find, matches};
 
 /// Implements `Expr` and optionally `ExprMut` for the struct.
 ///
@@ -126,6 +126,3 @@ pub use hitori_macros::impl_expr;
 #[cfg(feature = "macros")]
 #[cfg_attr(doc, doc(cfg(feature = "macros")))]
 pub use hitori_macros::impl_expr_mut;
-
-pub use capture::{Capture, CaptureMut};
-pub use expr::{Expr, ExprMut};
