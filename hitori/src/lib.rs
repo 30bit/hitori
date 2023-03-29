@@ -75,6 +75,10 @@ extern crate alloc;
 pub mod examples;
 pub mod string;
 
+pub mod __arrayvec {
+    pub use ::arrayvec::*;
+}
+
 mod expr;
 mod generic;
 

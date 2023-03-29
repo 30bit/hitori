@@ -1,4 +1,4 @@
-pub mod args;
+mod args;
 
 use crate::utils::{eq_by_fmt, type_path_ref};
 use args::Args;
