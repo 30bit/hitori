@@ -1,16 +1,16 @@
-pub mod define;
-pub mod impl_;
+pub mod args;
 
-use crate::utils::{eq_by_fmt, find_unique_hitori_attr, take_type_path, type_path_ref};
+use crate::utils::{eq_by_fmt, type_path_ref};
+use args::Args;
 use proc_macro2::{Ident, TokenStream};
-use quote::ToTokens as _;
+use quote::{format_ident, ToTokens as _};
 use std::array;
 use syn::{
     parse2,
     punctuated::{self, Punctuated},
     token::Bang,
     Expr, GenericArgument, GenericParam, ImplItem, ImplItemConst, ItemImpl, Path, PathArguments,
-    PathSegment, Token, WhereClause,
+    PathSegment, Token, Type, TypePath, VisPublic, Visibility, WhereClause,
 };
 
 fn trait_ident_and_args(
@@ -25,16 +25,16 @@ fn trait_ident_and_args(
         };
             match arguments {
                 PathArguments::AngleBracketed(args) => {
-                    if args.args.len() == 3 {
+                    if args.args.len() == 2 {
                         return Ok((ident, args.args));
                     } else {
-                        syn::Error::new_spanned(args, "expected 3 arguments")
+                        syn::Error::new_spanned(args, "expected 2 arguments")
                     }
                 }
                 PathArguments::Parenthesized(args) => {
                     syn::Error::new_spanned(args, "expected angle brackets around arguments")
                 }
-                PathArguments::None => syn::Error::new_spanned(ident, "expected 3 arguments"),
+                PathArguments::None => syn::Error::new_spanned(ident, "expected 2 arguments"),
             }
         },
     )
@@ -44,7 +44,7 @@ fn const_expr(items: Vec<ImplItem>) -> syn::Result<Expr> {
     let mut const_iter = items.into_iter().map(|item| {
         Err(syn::Error::new_spanned(
             match item {
-                syn::ImplItem::Const(const_) => {
+                ImplItem::Const(const_) => {
                     return Err(if const_.ident != "PATTERN" {
                         syn::Error::new_spanned(const_.ident, "not `PATTERN`")
                     } else if !eq_by_fmt(&const_.ty, <Token![_]>::default()) {
@@ -53,10 +53,10 @@ fn const_expr(items: Vec<ImplItem>) -> syn::Result<Expr> {
                         return Ok(const_);
                     });
                 }
-                syn::ImplItem::Method(method) => method.into_token_stream(),
-                syn::ImplItem::Type(ty) => ty.into_token_stream(),
-                syn::ImplItem::Macro(macro_) => macro_.into_token_stream(),
-                syn::ImplItem::Verbatim(verbatim) => verbatim,
+                ImplItem::Method(method) => method.into_token_stream(),
+                ImplItem::Type(ty) => ty.into_token_stream(),
+                ImplItem::Macro(macro_) => macro_.into_token_stream(),
+                ImplItem::Verbatim(verbatim) => verbatim,
                 _ => TokenStream::new(),
             },
             "not a const item",
@@ -91,42 +91,60 @@ fn const_expr(items: Vec<ImplItem>) -> syn::Result<Expr> {
 }
 
 pub struct Output {
-    pub impl_config: impl_::Config,
-    pub define_config: Option<define::Config>,
+    pub is_mut: bool,
+    pub vis: Visibility,
+    pub capture_ident: Ident,
     pub generic_params: Punctuated<GenericParam, Token![,]>,
     pub where_clause: Option<WhereClause>,
-    pub self_path: Path,
+    pub self_ty: Box<Type>,
     pub trait_ident: Ident,
-    pub trait_args: [GenericArgument; 3],
+    pub trait_args: [GenericArgument; 2],
     pub const_expr: Expr,
 }
 
 impl Output {
-    fn new(impl_config: impl_::Config, item: ItemImpl) -> syn::Result<Self> {
-        let define_config = find_unique_hitori_attr(&item.attrs, "and_define")?;
-        let self_path = type_path_ref(&item.self_ty)
-            .ok_or_else(|| syn::Error::new_spanned(&item.self_ty, "not a path type"))?;
+    fn new(is_mut: bool, args: Args, item: ItemImpl) -> syn::Result<Self> {
         let (trait_ident, trait_args) = trait_ident_and_args(
             item.trait_
-                .ok_or_else(|| syn::Error::new_spanned(self_path, "not a trait impl"))?,
+                .ok_or_else(|| syn::Error::new_spanned(&item.self_ty, "not a trait impl"))?,
         )?;
 
-        if impl_config != trait_ident {
-            return Err(syn::Error::new_spanned(
-                trait_ident,
-                match impl_config {
-                    impl_::Config::Expr { .. } => "not `Expr`",
-                    impl_::Config::ExprMut => "not `ExprMut`",
-                },
-            ));
+        if is_mut {
+            if trait_ident != "ExprMut" {
+                return Err(syn::Error::new_spanned(trait_ident, "not `ExprMut`"));
+            }
+        } else if trait_ident != "Expr" {
+            return Err(syn::Error::new_spanned(trait_ident, "not `Expr`"));
         }
 
+        let capture_ident = if let Some(ident) = args.capture_ident {
+            ident
+        } else {
+            match type_path_ref(&item.self_ty) {
+                Some(TypePath {
+                    path: Path { segments, .. },
+                    ..
+                }) if !segments.is_empty() => {
+                    let self_ident = &segments.last().unwrap().ident;
+                    format_ident!("{self_ident}Capture")
+                }
+                _ => format_ident!("Capture"),
+            }
+        };
+
+        let vis = args.vis.unwrap_or_else(|| {
+            Visibility::Public(VisPublic {
+                pub_token: Default::default(),
+            })
+        });
+
         const_expr(item.items).map(|const_expr| Output {
-            impl_config,
-            define_config,
+            is_mut,
+            vis,
+            capture_ident,
             generic_params: item.generics.params,
             where_clause: item.generics.where_clause,
-            self_path: take_type_path(item.self_ty).unwrap().path,
+            self_ty: item.self_ty,
             trait_ident,
             trait_args: {
                 let mut trait_args_iter = trait_args.into_iter();
@@ -135,8 +153,8 @@ impl Output {
             const_expr,
         })
     }
+}
 
-    pub fn parse<const MUT: bool>(attr: TokenStream, item: TokenStream) -> syn::Result<Self> {
-        Self::new(impl_::Config::parse::<MUT>(attr)?, parse2(item)?)
-    }
+pub fn parse(is_mut: bool, attr: TokenStream, item: TokenStream) -> syn::Result<Output> {
+    Output::new(is_mut, parse2(attr)?, parse2(item)?)
 }

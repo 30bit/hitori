@@ -11,7 +11,7 @@
 use crate::{
     parse::{
         self,
-        define::{Config, ConfigKind},
+        args::{Args, ConfigKind},
     },
     utils::{eq_by_fmt, has_generic_arg_any_generic_params},
 };
@@ -230,7 +230,7 @@ fn capture_ranges(
 
 pub struct Input<'a> {
     pub hitori_ident: &'a Ident,
-    pub config: &'a Config,
+    pub config: &'a Args,
     pub generic_params: &'a Punctuated<GenericParam, Token![,]>,
     pub self_path: &'a Path,
     pub trait_idx_arg: &'a GenericArgument,
@@ -270,7 +270,7 @@ impl<'a> TryFrom<Input<'a>> for TokenStream {
         let self_path_last_ident = &input.self_path.segments.last().unwrap().ident;
         let prefix = input
             .config
-            .prefix
+            .capture_ident
             .as_ref()
             .map(Cow::Borrowed)
             .unwrap_or_else(|| Cow::Owned(format_ident!("{self_path_last_ident}Capture")));
