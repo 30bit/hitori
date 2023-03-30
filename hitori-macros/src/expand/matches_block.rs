@@ -230,33 +230,82 @@ impl State {
         self.next_subexpr_index += 1;
     }
 
+    fn push_empty_subexpr_matches(&mut self) {
+        self.set_next_subexpr();
+        let ident = &self.last_subexpr_matches_ident;
+        self.impl_wrapper_block.extend(quote! {
+            #[inline(always)]
+            fn #ident(&mut self) -> bool { true }
+        });
+    }
+
     fn push_subexpr_matches(&mut self, block: &TokenStream) {
         self.set_next_subexpr();
         let ident = &self.last_subexpr_matches_ident;
         self.impl_wrapper_block.extend(quote! {
             fn #ident(&mut self) -> bool { #block }
-        })
+        });
     }
 
     fn push_group_all(
         &mut self,
         all: &Punctuated<Expr, Token![,]>,
     ) -> syn::Result<BTreeSet<Ident>> {
-        // push even empty (then inline)
-        todo!()
+        let mut unique_capture_idents = BTreeSet::new();
+        let mut block = TokenStream::new();
+        for expr in all {
+            let branch_unique_capture_idents = self.push_tree(expr.try_into()?)?;
+            let branch_matches_ident = &self.last_subexpr_matches_ident;
+            if unique_capture_idents.is_empty() {
+                unique_capture_idents = branch_unique_capture_idents;
+                block.extend(quote! {
+                    #(
+                        let #unique_capture_idents = self.__capture.#unique_capture_idents.clone();
+                    )*
+                    if !self.#branch_matches_ident() {
+                        #(
+                            self.__capture.#unique_capture_idents = #unique_capture_idents;
+                        )*
+                        return false;
+                    }
+                })
+            } else {
+                for ident in branch_unique_capture_idents {
+                    if unique_capture_idents.insert(ident.clone()) {
+                        block.extend(quote! {
+                            let #ident = self.__capture.#ident.clone();
+                        });
+                    }
+                }
+                block.extend(quote! {
+                    if !self.#branch_matches_ident() {
+                        #(
+                            self.__capture.#unique_capture_idents = #unique_capture_idents;
+                        )*
+                        return false;
+                    }
+                });
+            }
+        }
+        block.extend(quote! { true });
+        self.push_subexpr_matches(&block);
+        Ok(unique_capture_idents)
     }
 
     fn push_group_any(
         &mut self,
         any: &Punctuated<Expr, Token![,]>,
     ) -> syn::Result<BTreeSet<Ident>> {
-        // push even empty (then inline)
         todo!()
     }
 
     fn push_group(&mut self, group: Group) -> syn::Result<BTreeSet<Ident>> {
         match group {
             Group::Paren(paren) => self.push_tree(paren.try_into()?),
+            Group::All(empty) | Group::Any(empty) if empty.is_empty() => {
+                self.push_empty_subexpr_matches();
+                Ok(BTreeSet::new())
+            }
             Group::All(all) => self.push_group_all(all),
             Group::Any(any) => self.push_group_any(any),
         }
@@ -277,13 +326,13 @@ impl State {
             return Ok(unique_capture_idents);
         }
 
-        let inner_subexpr_matches_ident = &self.last_subexpr_matches_ident;
+        let inner_matches_ident = &self.last_subexpr_matches_ident;
         let capture_idents_xcpt_last_iter = capture_idents.iter().take(capture_idents.len() - 1);
         let last_capture_ident = capture_idents.last().unwrap();
 
         self.push_subexpr_matches(&quote! {
             let start = self.__end.clone();
-            if !self.#inner_subexpr_matches_ident() {
+            if !self.#inner_matches_ident() {
                 return false;
             }
             #(
@@ -326,7 +375,7 @@ impl State {
             },
             Tree::Test(test) => {
                 self.push_test(test);
-                Ok(Default::default())
+                Ok(BTreeSet::new())
             }
         }
     }
