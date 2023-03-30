@@ -104,7 +104,7 @@ pub struct Output {
     pub idx_ty: Type,
     pub is_idx_generic: bool,
     pub ch_ty: Type,
-    pub const_expr: Expr,
+    pub expr: Expr,
     pub wrapper_ident: Ident,
     pub generic_params: Punctuated<GenericParam, Token![,]>,
     pub where_clause: Option<WhereClause>,
@@ -165,7 +165,7 @@ impl Output {
             format_ident!("Idx")
         };
 
-        const_expr(item.items).map(|const_expr| Output {
+        const_expr(item.items).map(|expr| Output {
             is_mut,
             capture_vis: vis,
             capture_options_ident: capture_ident,
@@ -177,7 +177,7 @@ impl Output {
             idx_ty,
             is_idx_generic,
             ch_ty,
-            const_expr,
+            expr,
             wrapper_ident,
             generic_params: item.generics.params,
             where_clause: item.generics.where_clause,

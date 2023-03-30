@@ -117,19 +117,21 @@ pub fn expand(parsed: parse::Output) -> syn::Result<TokenStream> {
         )
     };
 
-    let (matches_block, capture_fields) = matches_block::expand(
-        &hitori_ident,
-        parsed.is_mut,
-        &parsed.capture_vecs_ident,
-        &parsed.self_ty,
-        &parsed.iter_ident,
-        &parsed.idx_ty,
-        &parsed.ch_ty,
-        parsed.const_expr,
-        &parsed.wrapper_ident,
-        parsed.generic_params,
-        parsed.where_clause.as_ref(),
-    )?;
+    let (matches_block, capture_fields) = matches_block::Input {
+        hitori_ident: &hitori_ident,
+        is_mut: parsed.is_mut,
+        capture_options_ident: &parsed.capture_options_ident,
+        capture_vecs_ident: &parsed.capture_vecs_ident,
+        self_ty: &parsed.self_ty,
+        iter_ident: &parsed.iter_ident,
+        idx_ty: &parsed.idx_ty,
+        ch_ty: &parsed.ch_ty,
+        expr: parsed.expr,
+        wrapper_ident: &parsed.wrapper_ident,
+        generic_params: parsed.generic_params,
+        where_clause: parsed.where_clause.as_ref(),
+    }
+    .expand()?;
     output.extend(quote! {
         #impl_decl {
             #type_capture

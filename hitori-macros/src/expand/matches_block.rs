@@ -206,65 +206,70 @@ impl State {
     }
 }
 
-pub fn expand(
-    hitori_ident: &Ident,
-    is_mut: bool,
-    capture_ident: &Ident,
-    capture_vecs_ident: &Ident,
-    self_ty: &Type,
-    iter_ident: &Ident,
-    idx_ty: &Type,
-    ch_ty: &Type,
-    expr: Expr,
-    wrapper_ident: &Ident,
-    generic_params: Punctuated<GenericParam, Token![,]>,
-    where_clause: Option<&WhereClause>,
-) -> syn::Result<(TokenStream, BTreeSet<capture::Field>)> {
-    let mut st = State::default();
-    let impl_wrapper_block = st.tree(expr.try_into()?)?;
-    let tokens = if impl_wrapper_block.is_empty() {
-        quote! {
-            (core::option::Option::Some(..start), core::default::Default::default())
-        }
-    } else {
-        let partial_impl_wrapper = partial_impl_wrapper(
-            is_mut,
-            capture_vecs_ident,
-            self_ty,
-            iter_ident,
-            idx_ty,
-            ch_ty,
-            wrapper_ident,
-            generic_params,
-            where_clause,
-        );
-        let capture_vecs = capture::vecs(
-            hitori_ident,
-            capture_vecs_ident,
-            &capture_ident,
-            st.capture_fields.iter(),
-        );
-        let last_subexpr_matches_ident = st.last_subexpr_matches_ident;
-        quote! {
-            #partial_impl_wrapper {
-                #impl_wrapper_block
+pub struct Input<'a> {
+    pub hitori_ident: &'a Ident,
+    pub is_mut: bool,
+    pub capture_options_ident: &'a Ident,
+    pub capture_vecs_ident: &'a Ident,
+    pub self_ty: &'a Type,
+    pub iter_ident: &'a Ident,
+    pub idx_ty: &'a Type,
+    pub ch_ty: &'a Type,
+    pub expr: Expr,
+    pub wrapper_ident: &'a Ident,
+    pub generic_params: Punctuated<GenericParam, Token![,]>,
+    pub where_clause: Option<&'a WhereClause>,
+}
+
+impl<'a> Input<'a> {
+    pub fn expand(self) -> syn::Result<(TokenStream, BTreeSet<capture::Field>)> {
+        let mut st = State::default();
+        let impl_wrapper_block = st.tree(self.expr.try_into()?)?;
+        let tokens = if impl_wrapper_block.is_empty() {
+            quote! {
+                (core::option::Option::Some(..start), core::default::Default::default())
             }
-            #capture_vecs
-            let wrapper = #wrapper_ident {
-                __target: self,
-                __capture: core::default::Default::default(),
-                __end: start,
-                __iter: core::iter::IntoIterator::into_iter(iter),
-                __phantom: core::marker::PhantomData,
-            };
-            if wrapper.#last_subexpr_matches_ident() {
-                core::option::Option::Some(
-                    (..wrapper.__end, wrapper.__capture.into_options())
-                )
-            } else {
-                core::option::Option::None
+        } else {
+            let partial_impl_wrapper = partial_impl_wrapper(
+                self.is_mut,
+                self.capture_vecs_ident,
+                self.self_ty,
+                self.iter_ident,
+                self.idx_ty,
+                self.ch_ty,
+                self.wrapper_ident,
+                self.generic_params,
+                self.where_clause,
+            );
+            let capture_vecs = capture::vecs(
+                self.hitori_ident,
+                self.capture_vecs_ident,
+                self.capture_options_ident,
+                st.capture_fields.iter(),
+            );
+            let last_subexpr_matches_ident = st.last_subexpr_matches_ident;
+            let wrapper_ident = self.wrapper_ident;
+            quote! {
+                #partial_impl_wrapper {
+                    #impl_wrapper_block
+                }
+                #capture_vecs
+                let wrapper = #wrapper_ident {
+                    __target: self,
+                    __capture: core::default::Default::default(),
+                    __end: start,
+                    __iter: core::iter::IntoIterator::into_iter(iter),
+                    __phantom: core::marker::PhantomData,
+                };
+                if wrapper.#last_subexpr_matches_ident() {
+                    core::option::Option::Some(
+                        (..wrapper.__end, wrapper.__capture.into_options())
+                    )
+                } else {
+                    core::option::Option::None
+                }
             }
-        }
-    };
-    Ok((tokens, st.capture_fields))
+        };
+        Ok((tokens, st.capture_fields))
+    }
 }
