@@ -3,7 +3,7 @@ use crate::utils::{
     remove_generic_params_bounds,
 };
 use proc_macro2::{Ident, TokenStream};
-use quote::{quote, ToTokens as _};
+use quote::{format_ident, quote, ToTokens as _};
 use std::collections::BTreeSet;
 use syn::{
     parse::Parse, punctuated::Punctuated, Attribute, Expr, ExprRange, GenericParam, Token, Type,
@@ -111,7 +111,9 @@ enum Repeat {
 }
 
 impl Parse for Repeat {
+    #[allow(unreachable_code, unused_variables)]
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        return Err(input.error("repetitions are not implemented yet"));
         Ok(if input.fork().parse::<Token![?]>().is_ok() {
             Self::Question
         } else if input.fork().parse::<Token![*]>().is_ok() {
@@ -135,12 +137,12 @@ impl Parse for Repeat {
     }
 }
 
-enum Attr {
+enum HitoriAttribute {
     Repeat(Repeat),
     Capture(Punctuated<Ident, Token![,]>),
 }
 
-impl Attr {
+impl HitoriAttribute {
     fn find(attrs: &[Attribute]) -> syn::Result<Option<Self>> {
         match find_le_one_hitori_attr(attrs) {
             Ok(Some(attr)) => Ok(Some(if hitori_attr_ident_eq_str(attr, "capture") {
@@ -187,7 +189,7 @@ enum Group<'a> {
 }
 
 enum Tree<'a> {
-    Group(Group<'a>, Option<Attr>),
+    Group(Group<'a>, Option<HitoriAttribute>),
     Test(&'a Expr),
 }
 
@@ -196,9 +198,17 @@ impl<'a> TryFrom<&'a Expr> for Tree<'a> {
 
     fn try_from(expr: &'a Expr) -> syn::Result<Self> {
         Ok(match &expr {
-            Expr::Tuple(tuple) => Tree::Group(Group::All(&tuple.elems), Attr::find(&tuple.attrs)?),
-            Expr::Array(arr) => Tree::Group(Group::Any(&arr.elems), Attr::find(&arr.attrs)?),
-            Expr::Paren(paren) => Tree::Group(Group::Paren(&paren.expr), Attr::find(&paren.attrs)?),
+            Expr::Tuple(tuple) => Tree::Group(
+                Group::All(&tuple.elems),
+                HitoriAttribute::find(&tuple.attrs)?,
+            ),
+            Expr::Array(arr) => {
+                Tree::Group(Group::Any(&arr.elems), HitoriAttribute::find(&arr.attrs)?)
+            }
+            Expr::Paren(paren) => Tree::Group(
+                Group::Paren(&paren.expr),
+                HitoriAttribute::find(&paren.attrs)?,
+            ),
             _ => Tree::Test(expr),
         })
     }
@@ -206,13 +216,119 @@ impl<'a> TryFrom<&'a Expr> for Tree<'a> {
 
 #[derive(Default)]
 struct State {
-    subexpr_index: usize,
+    impl_wrapper_block: TokenStream,
+    next_subexpr_index: usize,
     last_subexpr_matches_ident: Option<Ident>,
 }
 
 impl State {
-    fn tree(&mut self, tree: Tree) -> syn::Result<(TokenStream, BTreeSet<Ident>)> {
+    fn set_next_subexpr(&mut self) {
+        self.last_subexpr_matches_ident = Some(format_ident!(
+            "__subexpr{}_matches",
+            self.next_subexpr_index
+        ));
+        self.next_subexpr_index += 1;
+    }
+
+    fn push_subexpr_matches(&mut self, block: &TokenStream) {
+        self.set_next_subexpr();
+        let ident = &self.last_subexpr_matches_ident;
+        self.impl_wrapper_block.extend(quote! {
+            fn #ident(&mut self) -> bool { #block }
+        })
+    }
+
+    fn push_group_all(
+        &mut self,
+        all: &Punctuated<Expr, Token![,]>,
+    ) -> syn::Result<BTreeSet<Ident>> {
+        // push even empty (then inline)
         todo!()
+    }
+
+    fn push_group_any(
+        &mut self,
+        any: &Punctuated<Expr, Token![,]>,
+    ) -> syn::Result<BTreeSet<Ident>> {
+        // push even empty (then inline)
+        todo!()
+    }
+
+    fn push_group(&mut self, group: Group) -> syn::Result<BTreeSet<Ident>> {
+        match group {
+            Group::Paren(paren) => self.push_tree(paren.try_into()?),
+            Group::All(all) => self.push_group_all(all),
+            Group::Any(any) => self.push_group_any(any),
+        }
+    }
+
+    fn push_repeat(&mut self, group: Group, _repeat: Repeat) -> syn::Result<BTreeSet<Ident>> {
+        let _unique_capture_idents = self.push_group(group)?;
+        unimplemented!()
+    }
+
+    fn push_capture(
+        &mut self,
+        group: Group,
+        capture_idents: Punctuated<Ident, Token![,]>,
+    ) -> syn::Result<BTreeSet<Ident>> {
+        let mut unique_capture_idents = self.push_group(group)?;
+        if unique_capture_idents.is_empty() {
+            return Ok(unique_capture_idents);
+        }
+
+        let inner_subexpr_matches_ident = &self.last_subexpr_matches_ident;
+        let capture_idents_xcpt_last_iter = capture_idents.iter().take(capture_idents.len() - 1);
+        let last_capture_ident = capture_idents.last().unwrap();
+
+        self.push_subexpr_matches(&quote! {
+            let start = self.__end.clone();
+            if !self.#inner_subexpr_matches_ident() {
+                return false;
+            }
+            #(
+                self.__capture.#capture_idents_xcpt_last_iter = Some(start.clone()..self.__end.clone());
+            )*
+            self.__capture.#last_capture_ident = Some(start..self.__end.clone());
+            true
+        });
+
+        unique_capture_idents.extend(capture_idents);
+        Ok(unique_capture_idents)
+    }
+
+    fn push_test(&mut self, test: &Expr) {
+        self.push_subexpr_matches(&quote! {
+            let next = if let core::option::Option::Some(next) = self.__iter.next() {
+                next
+            } else {
+                return false;
+            };
+            if (#test)(next.1) {
+                self.__end = next.0;
+                true
+            } else {
+                false
+            }
+        })
+    }
+
+    fn push_tree(&mut self, tree: Tree) -> syn::Result<BTreeSet<Ident>> {
+        match tree {
+            Tree::Group(group, maybe_attr) => match maybe_attr {
+                Some(attr) => match attr {
+                    HitoriAttribute::Repeat(repeat) => self.push_repeat(group, repeat),
+                    HitoriAttribute::Capture(capture_idents) => {
+                        self.push_capture(group, capture_idents)
+                    }
+                },
+                None => self.push_group(group),
+            },
+            Tree::Test(test) => {
+                self.push_test(test);
+                Ok(Default::default())
+            }
+        }
     }
 }
 
@@ -238,7 +354,8 @@ pub struct Input<'a> {
 impl<'a> Input<'a> {
     pub fn expand(self) -> syn::Result<Output> {
         let mut st = State::default();
-        let (impl_wrapper_block, unique_capture_idents) = st.tree(self.expr.try_into()?)?;
+        let unique_capture_idents = st.push_tree(self.expr.try_into()?)?;
+        let impl_wrapper_block = st.impl_wrapper_block;
         let tokens = if impl_wrapper_block.is_empty() {
             quote! {
                 (core::option::Option::Some(..start), core::default::Default::default())
@@ -270,7 +387,7 @@ impl<'a> Input<'a> {
                 };
                 if wrapper.#last_subexpr_matches_ident() {
                     core::option::Option::Some((
-                        ..wrapper.__end, 
+                        ..wrapper.__end,
                         wrapper.__capture
                     ))
                 } else {
