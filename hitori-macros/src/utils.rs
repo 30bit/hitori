@@ -1,16 +1,10 @@
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote, ToTokens};
-use std::{borrow::BorrowMut, convert, fmt::Write as _, marker::PhantomData, mem};
+use std::{convert, fmt::Write as _, mem};
 use syn::{
-    parse::Parse, punctuated::Punctuated, Attribute, Binding, Expr, ExprArray, ExprAssign,
-    ExprAssignOp, ExprAsync, ExprAwait, ExprBinary, ExprBlock, ExprBox, ExprBreak, ExprCall,
-    ExprCast, ExprClosure, ExprContinue, ExprField, ExprForLoop, ExprGroup, ExprIf, ExprIndex,
-    ExprLet, ExprLit, ExprLoop, ExprMacro, ExprMatch, ExprMethodCall, ExprParen, ExprPath,
-    ExprRange, ExprReference, ExprRepeat, ExprReturn, ExprStruct, ExprTry, ExprTryBlock, ExprTuple,
-    ExprType, ExprUnary, ExprUnsafe, ExprWhile, ExprYield, GenericArgument, GenericParam,
-    LifetimeDef, ParenthesizedGenericArguments, Path, PathArguments, ReturnType, Token, Type,
-    TypeImplTrait, TypeParam, TypeParamBound, TypeParen, TypePath, TypePtr, TypeReference,
-    TypeTraitObject,
+    punctuated::Punctuated, Attribute, Binding, GenericArgument, GenericParam, LifetimeDef,
+    ParenthesizedGenericArguments, Path, PathArguments, ReturnType, Token, Type, TypeImplTrait,
+    TypeParam, TypeParamBound, TypeParen, TypePath, TypePtr, TypeReference, TypeTraitObject,
 };
 
 pub fn hitori_ident() -> Ident {
@@ -24,6 +18,16 @@ pub fn hitori_ident() -> Ident {
     format_ident!("hitori")
 }
 
+pub fn hitori_attr_ident_eq_str(attr: &Attribute, s: &str) -> bool {
+    let segments = &attr.path.segments;
+    debug_assert!(
+        segments.len() == 2,
+        "expected hitori attributes to contain 2 path segments"
+    );
+    debug_assert_eq!(segments[0].ident, "hitori");
+    segments[1].ident == s
+}
+
 fn is_hitori_attr_path(attr_path: &Path) -> bool {
     attr_path.leading_colon.is_none()
         && !attr_path.segments.empty_or_trailing()
@@ -31,84 +35,47 @@ fn is_hitori_attr_path(attr_path: &Path) -> bool {
         && attr_path.segments[0].ident == "hitori"
 }
 
-fn find_hitori_attr_index(attrs: &[Attribute], suffix: &str) -> Option<usize> {
-    attrs.iter().position(|attr| {
-        is_hitori_attr_path(&attr.path)
-            && attr.path.segments.len() == 2
-            && attr.path.segments[1].ident == suffix
-    })
+fn find_hitori_attr_index(attrs: &[Attribute]) -> Option<usize> {
+    attrs
+        .iter()
+        .position(|attr| is_hitori_attr_path(&attr.path) && attr.path.segments.len() == 2)
 }
 
-fn find_unique_hitori_attr_index(attrs: &[Attribute], suffix: &str) -> syn::Result<Option<usize>> {
-    let Some(index) = find_hitori_attr_index(attrs, suffix) else {
-        return Ok(None);
-    };
-    match find_hitori_attr_index(&attrs[(index + 1)..], suffix) {
-        Some(dup_index) => Err(syn::Error::new_spanned(
-            &attrs[dup_index],
-            format!("duplicate `{suffix}`"),
-        )),
-        None => Ok(Some(index)),
-    }
-}
-
-pub fn find_unique_hitori_attr<T: Parse>(
-    attrs: &[Attribute],
-    suffix: &str,
-) -> syn::Result<Option<(usize, T)>> {
-    find_unique_hitori_attr_index(attrs, suffix).and_then(|found| {
-        found
-            .map(|index| attrs[index].parse_args().map(|parsed| (index, parsed)))
-            .transpose()
-    })
-}
-
-struct FindHitoriAttrsIndices<'a> {
-    attrs: &'a [Attribute],
-    suffix: &'a str,
-}
+struct FindHitoriAttrsIndices<'a>(&'a [Attribute]);
 
 impl<'a> Iterator for FindHitoriAttrsIndices<'a> {
     type Item = usize;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.attrs.is_empty() {
+        if self.0.is_empty() {
             return None;
         }
-        match find_hitori_attr_index(self.attrs, self.suffix) {
+        match find_hitori_attr_index(self.0) {
             Some(index) => {
-                self.attrs = &self.attrs[(index + 1)..];
+                self.0 = &self.0[(index + 1)..];
                 Some(index)
             }
             None => {
-                self.attrs = &[];
+                self.0 = &[];
                 None
             }
         }
     }
 }
 
-pub struct FindHitoriAttrs<'a, T> {
-    find_indices: FindHitoriAttrsIndices<'a>,
-    phantom: PhantomData<T>,
-}
-
-impl<'a, T> FindHitoriAttrs<'a, T> {
-    pub fn new(attrs: &'a [Attribute], suffix: &'a str) -> Self {
-        Self {
-            find_indices: FindHitoriAttrsIndices { attrs, suffix },
-            phantom: PhantomData,
+pub fn find_le_one_hitori_attr(attrs: &[Attribute]) -> Result<Option<&Attribute>, [&Attribute; 2]> {
+    let mut indices = FindHitoriAttrsIndices(attrs);
+    if let Some(mut first_index) = indices.next() {
+        if let Some(mut second_index) = indices.next() {
+            for next_index in indices {
+                first_index = mem::replace(&mut second_index, next_index);
+            }
+            Err([&attrs[first_index], &attrs[second_index]])
+        } else {
+            Ok(Some(&attrs[first_index]))
         }
-    }
-}
-
-impl<'a, T: Parse> Iterator for FindHitoriAttrs<'a, T> {
-    type Item = (usize, syn::Result<T>);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.find_indices
-            .next()
-            .map(|index| (index, self.find_indices.attrs[index].parse_args()))
+    } else {
+        Ok(None)
     }
 }
 
@@ -138,7 +105,7 @@ pub fn lifetimes_into_punctuated_unit_refs<'a>(
 
 pub fn generic_arg_try_into_type(arg: GenericArgument) -> syn::Result<Type> {
     match &arg {
-        GenericArgument::Type(ty) => match arg {
+        GenericArgument::Type(_) => match arg {
             GenericArgument::Type(ty) => Ok(ty),
             _ => unreachable!(),
         },
@@ -175,39 +142,6 @@ pub fn type_path_ref(ty: &Type) -> Option<&TypePath> {
     let mut ty = next!(ty);
     loop {
         ty = next!(ty.as_ref());
-    }
-}
-
-pub fn _take_type_path<T: BorrowMut<Type>>(mut ty: T) -> Option<TypePath> {
-    macro_rules! next {
-        ($ty:expr) => {
-            match $ty.borrow_mut() {
-                Type::Paren(TypeParen { elem, .. })
-                | Type::Reference(TypeReference { elem, .. })
-                | Type::Ptr(TypePtr { elem, .. }) => elem,
-                Type::Path(TypePath {
-                    qself,
-                    path:
-                        Path {
-                            leading_colon,
-                            segments,
-                        },
-                }) => {
-                    return Some(TypePath {
-                        qself: qself.take(),
-                        path: Path {
-                            leading_colon: leading_colon.take(),
-                            segments: mem::take(segments),
-                        },
-                    })
-                }
-                _ => return None,
-            }
-        };
-    }
-    let mut ty = next!(ty);
-    loop {
-        ty = next!(ty);
     }
 }
 
@@ -332,59 +266,6 @@ pub fn remove_generic_params_bounds(params: &mut Punctuated<GenericParam, Token!
         } else if let GenericParam::Lifetime(l) = param {
             l.bounds = Punctuated::new()
         }
-    }
-}
-
-pub fn take_hitori_attrs(expr: &mut Expr) -> Vec<Attribute> {
-    match expr {
-        Expr::Array(ExprArray { attrs, .. })
-        | Expr::Tuple(ExprTuple { attrs, .. })
-        | Expr::Assign(ExprAssign { attrs, .. })
-        | Expr::AssignOp(ExprAssignOp { attrs, .. })
-        | Expr::Async(ExprAsync { attrs, .. })
-        | Expr::Await(ExprAwait { attrs, .. })
-        | Expr::Binary(ExprBinary { attrs, .. })
-        | Expr::Block(ExprBlock { attrs, .. })
-        | Expr::Box(ExprBox { attrs, .. })
-        | Expr::Break(ExprBreak { attrs, .. })
-        | Expr::Call(ExprCall { attrs, .. })
-        | Expr::Cast(ExprCast { attrs, .. })
-        | Expr::Closure(ExprClosure { attrs, .. })
-        | Expr::Continue(ExprContinue { attrs, .. })
-        | Expr::Field(ExprField { attrs, .. })
-        | Expr::ForLoop(ExprForLoop { attrs, .. })
-        | Expr::Group(ExprGroup { attrs, .. })
-        | Expr::If(ExprIf { attrs, .. })
-        | Expr::Index(ExprIndex { attrs, .. })
-        | Expr::Let(ExprLet { attrs, .. })
-        | Expr::Lit(ExprLit { attrs, .. })
-        | Expr::Loop(ExprLoop { attrs, .. })
-        | Expr::Macro(ExprMacro { attrs, .. })
-        | Expr::Match(ExprMatch { attrs, .. })
-        | Expr::MethodCall(ExprMethodCall { attrs, .. })
-        | Expr::Paren(ExprParen { attrs, .. })
-        | Expr::Path(ExprPath { attrs, .. })
-        | Expr::Range(ExprRange { attrs, .. })
-        | Expr::Reference(ExprReference { attrs, .. })
-        | Expr::Repeat(ExprRepeat { attrs, .. })
-        | Expr::Return(ExprReturn { attrs, .. })
-        | Expr::Struct(ExprStruct { attrs, .. })
-        | Expr::Try(ExprTry { attrs, .. })
-        | Expr::TryBlock(ExprTryBlock { attrs, .. })
-        | Expr::Type(ExprType { attrs, .. })
-        | Expr::Unary(ExprUnary { attrs, .. })
-        | Expr::Unsafe(ExprUnsafe { attrs, .. })
-        | Expr::While(ExprWhile { attrs, .. })
-        | Expr::Yield(ExprYield { attrs, .. }) => {
-            let mut hitori_attrs = Vec::with_capacity(attrs.capacity());
-            for index in (0..attrs.len()).rev() {
-                if is_hitori_attr_path(&attrs[index].path) {
-                    hitori_attrs.push(attrs.remove(index));
-                }
-            }
-            hitori_attrs
-        }
-        _ => vec![],
     }
 }
 

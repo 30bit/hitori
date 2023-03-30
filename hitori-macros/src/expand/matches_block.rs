@@ -1,7 +1,6 @@
-use super::capture;
 use crate::utils::{
-    find_unique_hitori_attr, lifetimes_into_punctuated_unit_refs, remove_generic_params_bounds,
-    take_hitori_attrs, FindHitoriAttrs,
+    find_le_one_hitori_attr, hitori_attr_ident_eq_str, lifetimes_into_punctuated_unit_refs,
+    remove_generic_params_bounds,
 };
 use proc_macro2::{Ident, TokenStream};
 use quote::{quote, ToTokens as _};
@@ -13,7 +12,7 @@ use syn::{
 
 fn partial_impl_wrapper(
     is_mut: bool,
-    capture_vecs_ident: &Ident,
+    capture_ident: &Ident,
     self_ty: &Type,
     iter_ident: &Ident,
     idx_ty: &Type,
@@ -65,7 +64,7 @@ fn partial_impl_wrapper(
     let mut output = quote! {
        struct #wrapper_ident<#wrapper_params> #where_clause {
            __target: &'a #mut_ #self_ty,
-           __capture: #capture_vecs_ident<#idx_ty>,
+           __capture: #capture_ident<#idx_ty>,
            __end: #idx_ty,
            __iter: #iter_ident,
            __phantom: core::marker::PhantomData<(#phantom_data_params)>,
@@ -103,7 +102,7 @@ fn partial_impl_wrapper(
     output
 }
 
-enum RepeatInner {
+enum Repeat {
     Question,
     Star,
     Plus,
@@ -111,7 +110,7 @@ enum RepeatInner {
     Range(ExprRange),
 }
 
-impl Parse for RepeatInner {
+impl Parse for Repeat {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         Ok(if input.fork().parse::<Token![?]>().is_ok() {
             Self::Question
@@ -136,59 +135,71 @@ impl Parse for RepeatInner {
     }
 }
 
-struct Repeat {
-    inner: RepeatInner,
-    capture_field_idents: Vec<Ident>,
+enum Attr {
+    Repeat(Repeat),
+    Capture(Punctuated<Ident, Token![,]>),
 }
 
-type Group = Punctuated<Expr, Token![,]>;
-
-enum TreeInner {
-    All(Group),
-    Any(Group),
-    Test(Expr),
+impl Attr {
+    fn find(attrs: &[Attribute]) -> syn::Result<Option<Self>> {
+        match find_le_one_hitori_attr(attrs) {
+            Ok(Some(attr)) => Ok(Some(if hitori_attr_ident_eq_str(attr, "capture") {
+                Self::Capture(attr.parse_args_with(Punctuated::parse_terminated)?)
+            } else {
+                Self::Repeat(attr.parse_args()?)
+            })),
+            Ok(None) => Ok(None),
+            Err([first, second]) => {
+                let is_first_capture = hitori_attr_ident_eq_str(first, "capture");
+                let is_second_capture = hitori_attr_ident_eq_str(second, "capture");
+                Err(syn::Error::new_spanned(
+                    first,
+                    if is_first_capture {
+                        if is_second_capture {
+                            "to capture group into multiple destinations, \
+                            use single `capture` attribute and \
+                            add each identifier to its argument list \
+                            (e.g. `#[hitori::capture(a, b, c)] _group`)"
+                        } else {
+                            "to capture a repetition \
+                            surround it by parenthesis or square brackets \
+                            (e.g. `#[hitori::capture(cap)] ( #[hitori::repeat(*)] _group )`)"
+                        }
+                    } else if is_second_capture {
+                        "to repeat a captured group \
+                        surround it by parenthesis or square brackets \
+                        (e.g. `#[hitori::repeat(+)] ( #[hitori::capture(cap)] _group )`)"
+                    } else {
+                        "to repeat a repetition, \
+                        surround it by parenthesis or square brackets \
+                        (e.g. `#[hitori::repeat(+)] ( #[hitori::repeat(?)] _group )`)"
+                    },
+                ))
+            }
+        }
+    }
 }
 
-struct Tree {
-    inner: TreeInner,
-    repeat: Option<Repeat>,
-    capture_field_idents: Vec<Ident>,
+enum Group<'a> {
+    Paren(&'a Expr),
+    All(&'a Punctuated<Expr, Token![,]>),
+    Any(&'a Punctuated<Expr, Token![,]>),
 }
 
-fn collect_capture_field_idents(attrs: &[Attribute]) -> syn::Result<Vec<Ident>> {
-    FindHitoriAttrs::new(attrs, "capture")
-        .map(|(_index, result)| result)
-        .collect()
+enum Tree<'a> {
+    Group(Group<'a>, Option<Attr>),
+    Test(&'a Expr),
 }
 
-impl TryFrom<Expr> for Tree {
+impl<'a> TryFrom<&'a Expr> for Tree<'a> {
     type Error = syn::Error;
 
-    fn try_from(mut expr: Expr) -> Result<Self, Self::Error> {
-        let attrs = take_hitori_attrs(&mut expr);
-        let found_repeat_inner = find_unique_hitori_attr(&attrs, "repeat")?;
-        let attrs_in_repeat = if let Some((index, _args)) = &found_repeat_inner {
-            &attrs[index + 1..]
-        } else {
-            &attrs
-        };
-        let repeat = found_repeat_inner
-            .map(|(index, inner)| {
-                collect_capture_field_idents(&attrs[..index]).map(|capture_field_idents| Repeat {
-                    inner,
-                    capture_field_idents,
-                })
-            })
-            .transpose()?;
-        let capture_field_idents = collect_capture_field_idents(&attrs_in_repeat)?;
-        Ok(Self {
-            inner: match expr {
-                Expr::Tuple(tuple) => TreeInner::All(tuple.elems),
-                Expr::Array(arr) => TreeInner::Any(arr.elems),
-                _ => TreeInner::Test(expr),
-            },
-            repeat,
-            capture_field_idents,
+    fn try_from(expr: &'a Expr) -> syn::Result<Self> {
+        Ok(match &expr {
+            Expr::Tuple(tuple) => Tree::Group(Group::All(&tuple.elems), Attr::find(&tuple.attrs)?),
+            Expr::Array(arr) => Tree::Group(Group::Any(&arr.elems), Attr::find(&arr.attrs)?),
+            Expr::Paren(paren) => Tree::Group(Group::Paren(&paren.expr), Attr::find(&paren.attrs)?),
+            _ => Tree::Test(expr),
         })
     }
 }
@@ -197,34 +208,37 @@ impl TryFrom<Expr> for Tree {
 struct State {
     subexpr_index: usize,
     last_subexpr_matches_ident: Option<Ident>,
-    capture_fields: BTreeSet<capture::Field>,
 }
 
 impl State {
-    fn tree(&mut self, tree: Tree) -> syn::Result<TokenStream> {
+    fn tree(&mut self, tree: Tree) -> syn::Result<(TokenStream, BTreeSet<Ident>)> {
         todo!()
     }
+}
+
+pub struct Output {
+    pub tokens: TokenStream,
+    pub unique_capture_idents: BTreeSet<Ident>,
 }
 
 pub struct Input<'a> {
     pub hitori_ident: &'a Ident,
     pub is_mut: bool,
-    pub capture_options_ident: &'a Ident,
-    pub capture_vecs_ident: &'a Ident,
+    pub capture_ident: &'a Ident,
     pub self_ty: &'a Type,
     pub iter_ident: &'a Ident,
     pub idx_ty: &'a Type,
     pub ch_ty: &'a Type,
-    pub expr: Expr,
+    pub expr: &'a Expr,
     pub wrapper_ident: &'a Ident,
     pub generic_params: Punctuated<GenericParam, Token![,]>,
     pub where_clause: Option<&'a WhereClause>,
 }
 
 impl<'a> Input<'a> {
-    pub fn expand(self) -> syn::Result<(TokenStream, BTreeSet<capture::Field>)> {
+    pub fn expand(self) -> syn::Result<Output> {
         let mut st = State::default();
-        let impl_wrapper_block = st.tree(self.expr.try_into()?)?;
+        let (impl_wrapper_block, unique_capture_idents) = st.tree(self.expr.try_into()?)?;
         let tokens = if impl_wrapper_block.is_empty() {
             quote! {
                 (core::option::Option::Some(..start), core::default::Default::default())
@@ -232,7 +246,7 @@ impl<'a> Input<'a> {
         } else {
             let partial_impl_wrapper = partial_impl_wrapper(
                 self.is_mut,
-                self.capture_vecs_ident,
+                self.capture_ident,
                 self.self_ty,
                 self.iter_ident,
                 self.idx_ty,
@@ -241,19 +255,12 @@ impl<'a> Input<'a> {
                 self.generic_params,
                 self.where_clause,
             );
-            let capture_vecs = capture::vecs(
-                self.hitori_ident,
-                self.capture_vecs_ident,
-                self.capture_options_ident,
-                st.capture_fields.iter(),
-            );
             let last_subexpr_matches_ident = st.last_subexpr_matches_ident;
             let wrapper_ident = self.wrapper_ident;
             quote! {
                 #partial_impl_wrapper {
                     #impl_wrapper_block
                 }
-                #capture_vecs
                 let wrapper = #wrapper_ident {
                     __target: self,
                     __capture: core::default::Default::default(),
@@ -262,14 +269,18 @@ impl<'a> Input<'a> {
                     __phantom: core::marker::PhantomData,
                 };
                 if wrapper.#last_subexpr_matches_ident() {
-                    core::option::Option::Some(
-                        (..wrapper.__end, wrapper.__capture.into_options())
-                    )
+                    core::option::Option::Some((
+                        ..wrapper.__end, 
+                        wrapper.__capture
+                    ))
                 } else {
                     core::option::Option::None
                 }
             }
         };
-        Ok((tokens, st.capture_fields))
+        Ok(Output {
+            tokens,
+            unique_capture_idents,
+        })
     }
 }

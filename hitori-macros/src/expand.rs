@@ -1,10 +1,10 @@
-mod capture;
 mod matches_block;
 
 use crate::{parse, utils::hitori_ident};
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
-use syn::{punctuated::Punctuated, GenericParam, Token, Type, WhereClause};
+use std::collections::BTreeSet;
+use syn::{punctuated::Punctuated, GenericParam, Token, Type, Visibility, WhereClause};
 
 fn impl_decl(
     hitori_ident: &Ident,
@@ -48,6 +48,37 @@ fn matches_sig(
 fn type_capture(capture_ident: &Ident, idx_ty: &Type) -> TokenStream {
     quote! {
         type Capture = #capture_ident<#idx_ty>;
+    }
+}
+
+fn capture<'a>(
+    vis: &Visibility,
+    ident: &Ident,
+    idx_ident: &Ident,
+    default_idx_ty: Option<&Type>,
+    field_idents: &BTreeSet<Ident>,
+) -> TokenStream {
+    quote! {
+        #[derive(
+            core::clone::Clone,
+            core::cmp::Eq,
+            core::cmp::PartialEq,
+            core::fmt::Debug,
+        )]
+        #vis struct #ident<#idx_ident = #default_idx_ty> {
+            #(
+                #field_idents: core::option::Option<core::ops::Range<#idx_ident>>,
+            )*
+        }
+        impl<#idx_ident> core::default::Default for #ident<#idx_ident> {
+            fn default() -> Self {
+                Self {
+                    #(
+                        #field_idents: core::option::Option::None,
+                    )*
+                }
+            }
+        }
     }
 }
 
@@ -117,21 +148,24 @@ pub fn expand(parsed: parse::Output) -> syn::Result<TokenStream> {
         )
     };
 
-    let (matches_block, capture_fields) = matches_block::Input {
+    let matches_block::Output {
+        tokens: matches_block,
+        unique_capture_idents,
+    } = matches_block::Input {
         hitori_ident: &hitori_ident,
         is_mut: parsed.is_mut,
-        capture_options_ident: &parsed.capture_options_ident,
-        capture_vecs_ident: &parsed.capture_vecs_ident,
+        capture_ident: &parsed.capture_options_ident,
         self_ty: &parsed.self_ty,
         iter_ident: &parsed.iter_ident,
         idx_ty: &parsed.idx_ty,
         ch_ty: &parsed.ch_ty,
-        expr: parsed.expr,
+        expr: &parsed.expr,
         wrapper_ident: &parsed.wrapper_ident,
         generic_params: parsed.generic_params,
         where_clause: parsed.where_clause.as_ref(),
     }
     .expand()?;
+
     output.extend(quote! {
         #impl_decl {
             #type_capture
@@ -139,12 +173,12 @@ pub fn expand(parsed: parse::Output) -> syn::Result<TokenStream> {
         }
     });
 
-    output.extend(capture::options(
+    output.extend(capture(
         &parsed.capture_vis,
         &parsed.capture_options_ident,
         &parsed.capture_idx_ident,
         (!parsed.is_idx_generic).then_some(&parsed.idx_ty),
-        capture_fields.iter().map(|field| &field.ident),
+        &unique_capture_idents,
     ));
 
     Ok(output)
