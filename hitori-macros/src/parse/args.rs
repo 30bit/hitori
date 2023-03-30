@@ -15,8 +15,8 @@ impl TryFrom<Punctuated<Meta, Token![,]>> for Args {
     type Error = syn::Error;
 
     fn try_from(args: Punctuated<Meta, Token![,]>) -> syn::Result<Self> {
-        let mut capture = None;
-        let mut vis = None;
+        let mut capture_ident = None;
+        let mut capture_vis = None;
 
         for arg in &args {
             match arg {
@@ -26,26 +26,34 @@ impl TryFrom<Punctuated<Meta, Token![,]>> for Args {
                     ..
                 }) => {
                     if path_eq_ident_str(path, "with_capture") {
-                        if capture.is_none() {
-                            capture = Some(s.parse()?);
+                        if capture_ident.is_none() {
+                            capture_ident = Some(s.parse()?);
                         } else {
                             return Err(syn::Error::new_spanned(path, "duplicate `with_capture`"));
                         }
-                    } else if path_eq_ident_str(path, "with_vis") {
-                        if vis.is_none() {
-                            vis = Some(s.parse()?);
+                    } else if path_eq_ident_str(path, "with_capture_vis") {
+                        if capture_vis.is_none() {
+                            capture_vis = Some(s.parse()?);
                         } else {
-                            return Err(syn::Error::new_spanned(path, "duplicate `with_vis`"));
+                            return Err(syn::Error::new_spanned(
+                                path,
+                                "duplicate `with_capture_vis`",
+                            ));
                         }
                     }
                 }
-                _ => return Err(syn::Error::new_spanned(arg, "unexpected argument")),
+                _ => {
+                    return Err(syn::Error::new_spanned(
+                        arg,
+                        "expected `with_capture` or `with_capture_vis`",
+                    ))
+                }
             }
         }
 
         Ok(Self {
-            capture_vis: vis,
-            capture_ident: capture,
+            capture_vis,
+            capture_ident,
         })
     }
 }

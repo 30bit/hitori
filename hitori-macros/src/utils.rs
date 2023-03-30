@@ -1,6 +1,6 @@
-use proc_macro2::Ident;
-use quote::{format_ident, ToTokens};
-use std::{borrow::BorrowMut, convert, fmt::Write as _, mem};
+use proc_macro2::{Ident, TokenStream};
+use quote::{format_ident, quote, ToTokens};
+use std::{borrow::BorrowMut, convert, fmt::Write as _, marker::PhantomData, mem};
 use syn::{
     parse::Parse, punctuated::Punctuated, Attribute, Binding, Expr, ExprArray, ExprAssign,
     ExprAssignOp, ExprAsync, ExprAwait, ExprBinary, ExprBlock, ExprBox, ExprBreak, ExprCall,
@@ -8,8 +8,9 @@ use syn::{
     ExprLet, ExprLit, ExprLoop, ExprMacro, ExprMatch, ExprMethodCall, ExprParen, ExprPath,
     ExprRange, ExprReference, ExprRepeat, ExprReturn, ExprStruct, ExprTry, ExprTryBlock, ExprTuple,
     ExprType, ExprUnary, ExprUnsafe, ExprWhile, ExprYield, GenericArgument, GenericParam,
-    ParenthesizedGenericArguments, Path, PathArguments, ReturnType, Token, Type, TypeImplTrait,
-    TypeParam, TypeParamBound, TypeParen, TypePath, TypePtr, TypeReference, TypeTraitObject,
+    LifetimeDef, ParenthesizedGenericArguments, Path, PathArguments, ReturnType, Token, Type,
+    TypeImplTrait, TypeParam, TypeParamBound, TypeParen, TypePath, TypePtr, TypeReference,
+    TypeTraitObject,
 };
 
 pub fn hitori_ident() -> Ident {
@@ -54,9 +55,12 @@ fn find_unique_hitori_attr_index(attrs: &[Attribute], suffix: &str) -> syn::Resu
 pub fn find_unique_hitori_attr<T: Parse>(
     attrs: &[Attribute],
     suffix: &str,
-) -> syn::Result<Option<T>> {
-    find_unique_hitori_attr_index(attrs, suffix)
-        .and_then(|found| found.map(|index| attrs[index].parse_args()).transpose())
+) -> syn::Result<Option<(usize, T)>> {
+    find_unique_hitori_attr_index(attrs, suffix).and_then(|found| {
+        found
+            .map(|index| attrs[index].parse_args().map(|parsed| (index, parsed)))
+            .transpose()
+    })
 }
 
 struct FindHitoriAttrsIndices<'a> {
@@ -84,10 +88,28 @@ impl<'a> Iterator for FindHitoriAttrsIndices<'a> {
     }
 }
 
-pub fn collect_hitori_attrs<T: Parse>(attrs: &[Attribute], suffix: &str) -> syn::Result<Vec<T>> {
-    FindHitoriAttrsIndices { attrs, suffix }
-        .map(|index| attrs[index].parse_args())
-        .collect()
+pub struct FindHitoriAttrs<'a, T> {
+    find_indices: FindHitoriAttrsIndices<'a>,
+    phantom: PhantomData<T>,
+}
+
+impl<'a, T> FindHitoriAttrs<'a, T> {
+    pub fn new(attrs: &'a [Attribute], suffix: &'a str) -> Self {
+        Self {
+            find_indices: FindHitoriAttrsIndices { attrs, suffix },
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl<'a, T: Parse> Iterator for FindHitoriAttrs<'a, T> {
+    type Item = (usize, syn::Result<T>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.find_indices
+            .next()
+            .map(|index| (index, self.find_indices.attrs[index].parse_args()))
+    }
 }
 
 pub fn eq_by_fmt<Lhs: ToTokens, Rhs: ToTokens>(lhs: Lhs, rhs: Rhs) -> bool {
@@ -104,6 +126,16 @@ pub fn path_eq_ident_str(path: &Path, ident_str: &str) -> bool {
         .unwrap_or_default()
 }
 
+pub fn lifetimes_into_punctuated_unit_refs<'a>(
+    iter: impl IntoIterator<Item = &'a LifetimeDef>,
+) -> TokenStream {
+    let mut output = TokenStream::new();
+    for LifetimeDef { lifetime, .. } in iter {
+        output.extend(quote! { & #lifetime (), });
+    }
+    output
+}
+
 pub fn generic_arg_try_into_type(arg: GenericArgument) -> syn::Result<Type> {
     match &arg {
         GenericArgument::Type(ty) => match arg {
@@ -112,6 +144,20 @@ pub fn generic_arg_try_into_type(arg: GenericArgument) -> syn::Result<Type> {
         },
         _ => Err(syn::Error::new_spanned(arg, "expected type")),
     }
+}
+
+pub fn ident_not_in_generic_params(
+    params: &Punctuated<GenericParam, Token![,]>,
+    mut init: String,
+) -> Ident {
+    while params.iter().any(|param| match param {
+        GenericParam::Type(TypeParam { ident, .. }) => ident == &init,
+        _ => false,
+    }) {
+        init.push('_');
+    }
+
+    format_ident!("{init}")
 }
 
 pub fn type_path_ref(ty: &Type) -> Option<&TypePath> {
@@ -132,7 +178,7 @@ pub fn type_path_ref(ty: &Type) -> Option<&TypePath> {
     }
 }
 
-pub fn take_type_path<T: BorrowMut<Type>>(mut ty: T) -> Option<TypePath> {
+pub fn _take_type_path<T: BorrowMut<Type>>(mut ty: T) -> Option<TypePath> {
     macro_rules! next {
         ($ty:expr) => {
             match $ty.borrow_mut() {

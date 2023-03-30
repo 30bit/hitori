@@ -22,8 +22,8 @@ fn impl_decl(
 }
 
 fn matches_sig(
-    is_mut: bool,
     hitori_ident: &Ident,
+    is_mut: bool,
     matches_ident: &Ident,
     iter_ident: &Ident,
     idx_ty: &Type,
@@ -81,8 +81,8 @@ pub fn expand(parsed: parse::Output) -> syn::Result<TokenStream> {
             format_ident!("matches")
         };
         matches_sig(
-            is_mut,
             &hitori_ident,
+            is_mut,
             &matches_ident,
             &parsed.iter_ident,
             &parsed.idx_ty,
@@ -90,7 +90,7 @@ pub fn expand(parsed: parse::Output) -> syn::Result<TokenStream> {
         )
     };
 
-    let type_capture = type_capture(&parsed.capture_ident, &parsed.idx_ty);
+    let type_capture = type_capture(&parsed.capture_options_ident, &parsed.idx_ty);
     let (mut output, impl_decl, type_capture, matches_sig) = if parsed.is_mut {
         (
             TokenStream::new(),
@@ -118,12 +118,15 @@ pub fn expand(parsed: parse::Output) -> syn::Result<TokenStream> {
     };
 
     let (matches_block, capture_fields) = matches_block::expand(
-        parsed.is_mut,
         &hitori_ident,
+        parsed.is_mut,
+        &parsed.capture_vecs_ident,
         &parsed.self_ty,
+        &parsed.iter_ident,
         &parsed.idx_ty,
         &parsed.ch_ty,
         parsed.const_expr,
+        &parsed.wrapper_ident,
         parsed.generic_params,
         parsed.where_clause.as_ref(),
     )?;
@@ -136,7 +139,7 @@ pub fn expand(parsed: parse::Output) -> syn::Result<TokenStream> {
 
     output.extend(capture::options(
         &parsed.capture_vis,
-        &parsed.capture_ident,
+        &parsed.capture_options_ident,
         &parsed.capture_idx_ident,
         (!parsed.is_idx_generic).then_some(&parsed.idx_ty),
         capture_fields.iter().map(|field| &field.ident),

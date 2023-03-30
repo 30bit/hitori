@@ -1,7 +1,8 @@
 mod args;
 
 use crate::utils::{
-    eq_by_fmt, generic_arg_try_into_type, has_type_any_generic_params, type_path_ref,
+    eq_by_fmt, generic_arg_try_into_type, has_type_any_generic_params, ident_not_in_generic_params,
+    type_path_ref,
 };
 use args::Args;
 use proc_macro2::{Ident, TokenStream};
@@ -9,14 +10,11 @@ use quote::{format_ident, ToTokens as _};
 use syn::{
     parse2,
     punctuated::{self, Punctuated},
-    token::Bang,
     Expr, GenericParam, ImplItem, ImplItemConst, ItemImpl, Path, PathArguments, PathSegment, Token,
-    Type, TypeParam, TypePath, VisPublic, Visibility, WhereClause,
+    Type, TypePath, VisPublic, Visibility, WhereClause,
 };
 
-fn trait_ident_and_args(
-    (_, mut path, _): (Option<Bang>, Path, Token![for]),
-) -> syn::Result<(Ident, [Type; 2])> {
+fn trait_ident_and_args(mut path: Path) -> syn::Result<(Ident, [Type; 2])> {
     Err(
         if path.segments.len() != 1 || path.leading_colon.is_some() {
             syn::Error::new_spanned(path, "expected ident")
@@ -97,38 +95,32 @@ fn const_expr(items: Vec<ImplItem>) -> syn::Result<Expr> {
 pub struct Output {
     pub is_mut: bool,
     pub capture_vis: Visibility,
-    pub capture_ident: Ident,
+    pub capture_options_ident: Ident,
     pub capture_idx_ident: Ident,
+    pub capture_vecs_ident: Ident,
     pub self_ty: Box<Type>,
     pub trait_ident: Ident,
+    pub iter_ident: Ident,
     pub idx_ty: Type,
     pub is_idx_generic: bool,
     pub ch_ty: Type,
-    pub iter_ident: Ident,
     pub const_expr: Expr,
+    pub wrapper_ident: Ident,
     pub generic_params: Punctuated<GenericParam, Token![,]>,
     pub where_clause: Option<WhereClause>,
 }
 
 impl Output {
     fn new(is_mut: bool, args: Args, item: ItemImpl) -> syn::Result<Self> {
-        let iter_ident = {
-            let mut iter_ident_string = String::with_capacity(2);
-            iter_ident_string.push('I');
-
-            while item.generics.params.iter().any(|param| match param {
-                GenericParam::Type(TypeParam { ident, .. }) => ident == &iter_ident_string,
-                _ => false,
-            }) {
-                iter_ident_string.push('_');
-            }
-
-            format_ident!("{iter_ident_string}")
-        };
+        let iter_ident = ident_not_in_generic_params(&item.generics.params, "I".into());
+        let wrapper_ident = ident_not_in_generic_params(&item.generics.params, "Self_".into());
+        let capture_vecs_ident =
+            ident_not_in_generic_params(&item.generics.params, "CaptureVecs".into());
 
         let (trait_ident, [idx_ty, ch_ty]) = trait_ident_and_args(
             item.trait_
-                .ok_or_else(|| syn::Error::new_spanned(&item.self_ty, "not a trait impl"))?,
+                .ok_or_else(|| syn::Error::new_spanned(&item.self_ty, "not a trait impl"))?
+                .1,
         )?;
 
         if is_mut {
@@ -176,8 +168,9 @@ impl Output {
         const_expr(item.items).map(|const_expr| Output {
             is_mut,
             capture_vis: vis,
-            capture_ident,
+            capture_options_ident: capture_ident,
             capture_idx_ident,
+            capture_vecs_ident,
             self_ty: item.self_ty,
             trait_ident,
             iter_ident,
@@ -185,6 +178,7 @@ impl Output {
             is_idx_generic,
             ch_ty,
             const_expr,
+            wrapper_ident,
             generic_params: item.generics.params,
             where_clause: item.generics.where_clause,
         })

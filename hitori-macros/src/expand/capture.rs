@@ -62,24 +62,38 @@ pub fn options<'a>(
 
 pub fn vecs<'a>(
     hitori_ident: &Ident,
+    ident: &Ident,
+    options_ident: &Ident,
     fields: impl Iterator<Item = &'a Field> + Clone,
 ) -> TokenStream {
     let field_idents = fields.clone().map(|field| &field.ident);
-    let field_idents_clone = field_idents.clone();
+    let field_idents1 = field_idents.clone();
+    let field_idents2 = field_idents.clone();
+    let field_idents3 = field_idents.clone();
     let field_max_set_counts =
         fields.map(|field| proc_macro2::Literal::usize_unsuffixed(field.max_set_count));
     quote! {
-        struct CaptureVecs {
+        struct #ident<Idx> {
             #(
                 #field_idents: #hitori_ident::__arrayvec::ArrayVec<Idx, #field_max_set_counts>,
             )*
         }
 
-        impl<Idx> core::default::Default for CaptureVecs<Idx> {
+        impl<Idx> core::default::Default for #ident<Idx> {
             fn default() -> Self {
                 Self {
                     #(
-                        #field_idents_clone: core::default::Default::default(),
+                        #field_idents1: core::default::Default::default(),
+                    )*
+                }
+            }
+        }
+
+        impl<Idx> #ident<Idx> {
+            fn into_options(mut self) -> #options_ident<Idx> {
+                #options_ident {
+                    #(
+                        #field_idents2: self.#field_idents3.pop(),
                     )*
                 }
             }
