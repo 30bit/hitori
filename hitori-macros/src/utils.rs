@@ -2,9 +2,10 @@ use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote, ToTokens};
 use std::{convert, fmt::Write as _, mem};
 use syn::{
-    punctuated::Punctuated, Attribute, Binding, GenericArgument, GenericParam, LifetimeDef,
-    ParenthesizedGenericArguments, Path, PathArguments, ReturnType, Token, Type, TypeImplTrait,
-    TypeParam, TypeParamBound, TypeParen, TypePath, TypePtr, TypeReference, TypeTraitObject,
+    punctuated::Punctuated, Attribute, Binding, Expr, ExprLit, GenericArgument, GenericParam,
+    LifetimeDef, Lit, ParenthesizedGenericArguments, Path, PathArguments, ReturnType, Token, Type,
+    TypeImplTrait, TypeParam, TypeParamBound, TypeParen, TypePath, TypePtr, TypeReference,
+    TypeTraitObject,
 };
 
 pub fn hitori_ident() -> Ident {
@@ -137,7 +138,7 @@ pub fn unique_ident<'a>(
     format_ident!("{init}")
 }
 
-pub fn type_path_ref(ty: &Type) -> Option<&TypePath> {
+pub fn type_as_type_path(ty: &Type) -> Option<&TypePath> {
     macro_rules! next {
         ($ty:expr) => {
             match $ty {
@@ -152,6 +153,15 @@ pub fn type_path_ref(ty: &Type) -> Option<&TypePath> {
     let mut ty = next!(ty);
     loop {
         ty = next!(ty.as_ref());
+    }
+}
+
+pub fn expr_as_lit_int(expr: &Expr) -> Option<i128> {
+    match expr {
+        Expr::Lit(ExprLit {
+            lit: Lit::Int(int), ..
+        }) => int.base10_parse().ok(),
+        _ => None,
     }
 }
 
@@ -240,7 +250,7 @@ pub fn has_type_any_generic_params(
     params: &Punctuated<GenericParam, Token![,]>,
     ty: &Type,
 ) -> bool {
-    if let Some(path) = type_path_ref(ty) {
+    if let Some(path) = type_as_type_path(ty) {
         has_type_path_any_generic_params(params, path)
     } else if let Type::ImplTrait(TypeImplTrait { bounds, .. })
     | Type::TraitObject(TypeTraitObject { bounds, .. }) = ty

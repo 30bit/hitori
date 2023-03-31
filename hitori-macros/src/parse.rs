@@ -2,7 +2,7 @@ mod args;
 
 use crate::utils::{
     eq_by_fmt, generic_arg_try_into_type, has_type_any_generic_params, ident_not_in_generic_params,
-    type_path_ref,
+    type_as_type_path,
 };
 use args::Args;
 use proc_macro2::{Ident, TokenStream};
@@ -139,7 +139,7 @@ impl Output {
         let capture_ident = if let Some(ident) = args.capture_ident {
             ident
         } else {
-            match type_path_ref(&item.self_ty) {
+            match type_as_type_path(&item.self_ty) {
                 Some(TypePath {
                     path: Path { segments, .. },
                     ..
@@ -152,7 +152,7 @@ impl Output {
         };
 
         let capture_idx_ident = if is_idx_generic
-            && type_path_ref(&idx_ty)
+            && type_as_type_path(&idx_ty)
                 .and_then(|type_path| type_path.path.get_ident())
                 .map(|idx_ident| idx_ident == "Idx")
                 .unwrap_or_default()
