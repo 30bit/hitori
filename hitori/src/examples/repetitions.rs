@@ -15,7 +15,7 @@ impl Expr<usize, char> for Scream {
             (|ch| ch == 'a'),
         ),
         // this repeats zero or one time
-        #[hitori::repeat(0..=1)]
+        #[hitori::repeat(0..1)]
         (|ch| ch == '!'),
     );
 }

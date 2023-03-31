@@ -1,6 +1,11 @@
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote, ToTokens};
-use std::{convert, fmt::Write as _, mem};
+use std::{
+    convert,
+    fmt::{Display, Write as _},
+    mem,
+    str::FromStr,
+};
 use syn::{
     punctuated::Punctuated, Attribute, Binding, Expr, ExprLit, GenericArgument, GenericParam,
     LifetimeDef, Lit, ParenthesizedGenericArguments, Path, PathArguments, ReturnType, Token, Type,
@@ -21,11 +26,8 @@ pub fn hitori_ident() -> Ident {
 
 pub fn hitori_attr_ident_eq_str(attr: &Attribute, s: &str) -> bool {
     let segments = &attr.path.segments;
-    debug_assert!(
-        segments.len() == 2,
-        "expected hitori attributes to contain 2 path segments"
-    );
-    debug_assert_eq!(segments[0].ident, "hitori");
+    assert!(segments.len() == 2, "bug");
+    assert_eq!(segments[0].ident, "hitori", "bug");
     segments[1].ident == s
 }
 
@@ -156,12 +158,16 @@ pub fn type_as_type_path(ty: &Type) -> Option<&TypePath> {
     }
 }
 
-pub fn expr_as_lit_int(expr: &Expr) -> Option<i128> {
+pub fn expr_as_lit_int<N>(expr: &Expr) -> syn::Result<N>
+where
+    N: FromStr,
+    N::Err: Display,
+{
     match expr {
         Expr::Lit(ExprLit {
             lit: Lit::Int(int), ..
-        }) => int.base10_parse().ok(),
-        _ => None,
+        }) => int.base10_parse(),
+        _ => Err(syn::Error::new_spanned(expr, "not a literal int")),
     }
 }
 

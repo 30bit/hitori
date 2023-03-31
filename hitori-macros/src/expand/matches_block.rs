@@ -1,13 +1,15 @@
+mod repeat;
+
 use crate::utils::{
-    eq_by_fmt, expr_as_lit_int, find_le_one_hitori_attr, hitori_attr_ident_eq_str,
-    lifetimes_into_punctuated_unit_refs, remove_generic_params_bounds, unique_ident,
+    expr_as_lit_int, find_le_one_hitori_attr, hitori_attr_ident_eq_str,
+    lifetimes_into_punctuated_unit_refs, remove_generic_params_bounds,
 };
 use proc_macro2::{Ident, TokenStream};
-use quote::{format_ident, quote, ToTokens};
-use std::{collections::BTreeSet, fmt::Write as _, ops::Bound};
+use quote::{format_ident, quote, ToTokens as _};
+use repeat::Repeat;
+use std::{collections::BTreeSet, ops::Bound};
 use syn::{
-    parse::Parse, punctuated::Punctuated, Attribute, Expr, ExprRange, GenericParam, RangeLimits,
-    Token, Type, WhereClause,
+    punctuated::Punctuated, Attribute, Expr, GenericParam, RangeLimits, Token, Type, WhereClause,
 };
 
 fn partial_impl_wrapper(
@@ -102,212 +104,6 @@ fn partial_impl_wrapper(
     output
 }
 
-enum Repeat {
-    Exact(Expr),
-    Range(ExprRange),
-}
-
-impl Parse for Repeat {
-    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        input.parse::<Expr>().and_then(|expr| match expr {
-            Expr::Range(range) => {
-                if range.from.is_some() {
-                    Ok(Self::Range(range))
-                } else {
-                    let mut expected = String::with_capacity(3);
-                    expected.push('0');
-                    expected
-                        .write_fmt(format_args!("{}", range.limits.to_token_stream()))
-                        .unwrap();
-                    expected
-                        .write_fmt(format_args!("{}", range.to.to_token_stream()))
-                        .unwrap();
-                    Err(syn::Error::new_spanned(
-                        range,
-                        format!("repetition range must have a lower bound (e.g. `{expected}`)",),
-                    ))
-                }
-            }
-            expr => Ok(Self::Exact(expr)),
-        })
-    }
-}
-
-fn repeat_question_block(inner_matches_ident: &Ident) -> TokenStream {
-    quote! {
-        let cloned_iter = ::core::clone::Clone::clone(&self.__iter);
-        if !self.#inner_matches_ident() {
-            self.__iter = cloned_iter;
-        }
-        true
-    }
-}
-
-fn repeat_star_block(inner_matches_ident: &Ident) -> TokenStream {
-    quote! {
-        let mut cloned_iter = ::core::clone::Clone::clone(&self.__iter);
-        while self.#inner_matches_ident() {
-            cloned_iter = ::core::clone::Clone::clone(&self.__iter);
-        }
-        self.__iter = cloned_iter;
-        true
-    }
-}
-
-fn repeat_plus_block(inner_matches_ident: &Ident) -> TokenStream {
-    quote! {
-        let mut cloned_iter = ::core::clone::Clone::clone(&self.__iter);
-        if self.#inner_matches_ident() {
-            cloned_iter = ::core::clone::Clone::clone(&self.__iter);
-        } else {
-            self.__iter = cloned_iter;
-            return false;
-        }
-        while self.#inner_matches_ident() {
-            cloned_iter = ::core::clone::Clone::clone(&self.__iter);
-        }
-        self.__iter = cloned_iter;
-        true
-    }
-}
-
-fn repeat_lit_exact_block(
-    inner_matches_ident: &Ident,
-    count: i128,
-    unique_capture_idents: &BTreeSet<Ident>,
-) -> Result<TokenStream, &'static str> {
-    if count < 0 {
-        return Err("expected non-negative repeat");
-    } else if count == 0 {
-        return Ok(quote! { true });
-    }
-
-    let (cache_tokens, for_tokens) = if count > 1 {
-        let count = count as usize;
-        (
-            Some(quote! {
-                #(
-                    let #unique_capture_idents =
-                        ::core::clone::Clone::clone(&self.__capture.#unique_capture_idents);
-                )*
-            }),
-            Some(quote! {
-                for _ in 1..#count {
-                    if !self.#inner_matches_ident() {
-                        #(
-                            self.__capture.#unique_capture_idents = #unique_capture_idents;
-                        )*
-                        return false;
-                    }
-                }
-            }),
-        )
-    } else {
-        (None, None)
-    };
-
-    Ok(quote! {
-        #cache_tokens
-        if !self.#inner_matches_ident() {
-            return false;
-        }
-        #for_tokens
-        true
-    })
-}
-
-/*
-
-fn repeat_range_block(
-    inner_matches_ident: &Ident,
-    range: &ExprRange,
-    lit_from: Option<i128>,
-    lit_to: Option<i128>,
-    unique_capture_idents: &BTreeSet<Ident>,
-) -> TokenStream {
-    let has_zero_start = eq_by_fmt(range.from.as_ref().unwrap(), quote! { 0 });
-    let range_ident = unique_ident(unique_capture_idents.iter(), "range".into());
-    let mut block = quote! {
-        let #range_ident = #range;
-    };
-
-    if !has_zero_start {
-        if matches!(&range.limits, RangeLimits::HalfOpen(_)) {
-            block.extend(quote! {
-                if #range_ident.start < 0  { return false; }
-            });
-        } else {
-            block.extend(quote! {
-                if #range_ident.start() < &0  { return false; }
-            });
-        }
-    }
-
-
-    quote! { todo!() }
-}
-
- */
-
-fn repeat_lit_range_block(
-    inner_matches_ident: &Ident,
-    from: i128,
-    to: Bound<i128>,
-    unique_capture_idents: &BTreeSet<Ident>,
-) -> Result<TokenStream, &'static str> {
-    /*
-        let range_ident = unique_ident(&unique_capture_idents, "range");
-        let mut block = quote! {
-            let #range_ident = #range;
-            // Either `star < 0t` or `::core::ops::RangeInclusive::start(&#range_ident) < &0`
-            if #range_ident.start < 0 { return false };
-        };
-        if range.to.is_some() {
-            // Either Range or RangeInclusive
-            block.extend(quote! {
-                if ::core::ops::range::Range::is_empty(&#range_ident) {
-                    return false;
-                }
-            });
-        }
-        let has_lower_bound = eq_by_fmt(range.from.as_ref().unwrap(), 0);
-        let mut inner_matches_owned_ident;
-        let inner_matches_ident = &self.last_subexpr_matches_ident;
-        if has_lower_bound {
-            inner_matches_owned_ident = self.last_subexpr_matches_ident.clone();
-            inner_matches_ident = &inner_matches_owned_ident;
-            block.extend(&repeat_exact_block(inner_matches_ident, &quote { #range_ident.start }, ));
-        } else if if range.to.is_some() {
-    `       block.extend(&quote! {
-                #(
-                let #unique_capture_idents =
-                    ::core::clone::Clone::clone(&self.__capture.#unique_capture_idents);
-                )*
-            });
-        }
-
-        if let Some(upper_bound) = range.to.as_ref() {
-            block.extend(quote! {
-                let mut cloned_iter = ::core::Clone::clone(&self.__iter);
-                // Don't clone last iter
-                for _ in range {
-                    if self.#inner_matches_ident() {
-                         cloned_iter = :core::Clone::clone(&self.__iter);
-                    } else {
-                        self.__iter = cloned_iter;
-                        return true;
-                    }
-                }
-                true
-            });
-        } else {
-            block.extend(&repeat_star_block(inner_matches_ident));
-            block
-        }
-        */
-    todo!()
-}
-
 enum HitoriAttribute {
     Repeat(Repeat),
     Capture(Punctuated<Ident, Token![,]>),
@@ -393,16 +189,16 @@ struct State {
 }
 
 impl State {
-    fn set_next_subexpr(&mut self) {
+    fn set_next_subexpr(&mut self, prefix: &str) {
         self.last_subexpr_matches_ident = Some(format_ident!(
-            "__subexpr{}_matches",
+            "__{prefix}_subexpr{}_matches",
             self.next_subexpr_index
         ));
         self.next_subexpr_index += 1;
     }
 
-    fn push_empty_subexpr_matches(&mut self, matches: bool) {
-        self.set_next_subexpr();
+    fn push_empty_subexpr_matches(&mut self, prefix: &str, matches: bool) {
+        self.set_next_subexpr(prefix);
         let ident = &self.last_subexpr_matches_ident;
         let mut tokens = quote! {
             #[inline(always)]
@@ -417,8 +213,8 @@ impl State {
         self.impl_wrapper_block.extend(tokens);
     }
 
-    fn push_subexpr_matches(&mut self, block: &TokenStream) {
-        self.set_next_subexpr();
+    fn push_subexpr_matches(&mut self, prefix: &str, block: &TokenStream) {
+        self.set_next_subexpr(prefix);
         let ident = &self.last_subexpr_matches_ident;
         self.impl_wrapper_block.extend(quote! {
             fn #ident(&mut self) -> bool { #block }
@@ -431,7 +227,7 @@ impl State {
     ) -> syn::Result<BTreeSet<Ident>> {
         let mut unique_capture_idents = BTreeSet::new();
         if all.is_empty() {
-            self.push_empty_subexpr_matches(true);
+            self.push_empty_subexpr_matches("all", true);
             return Ok(unique_capture_idents);
         }
         let mut block = TokenStream::new();
@@ -482,7 +278,7 @@ impl State {
         }
         branch(all.last().unwrap(), true)?;
         block.extend(quote! { true });
-        self.push_subexpr_matches(&block);
+        self.push_subexpr_matches("all", &block);
         Ok(unique_capture_idents)
     }
 
@@ -492,7 +288,7 @@ impl State {
     ) -> syn::Result<BTreeSet<Ident>> {
         let mut unique_capture_idents = BTreeSet::new();
         if any.is_empty() {
-            self.push_empty_subexpr_matches(false);
+            self.push_empty_subexpr_matches("any", false);
             return Ok(unique_capture_idents);
         }
         let mut block = (any.len() > 1)
@@ -536,7 +332,7 @@ impl State {
 
         branch(any.last().unwrap(), &quote! { false })?;
 
-        self.push_subexpr_matches(&block);
+        self.push_subexpr_matches("any", &block);
         Ok(unique_capture_idents)
     }
 
@@ -548,69 +344,103 @@ impl State {
         }
     }
 
+    fn push_lit_repeat_exact(
+        &mut self,
+        count: usize,
+        inner_unique_capture_idents: &BTreeSet<Ident>,
+    ) {
+        if count == 0 {
+            self.push_empty_subexpr_matches("repeat", true);
+            return;
+        }
+
+        let block = repeat::lit_exact(
+            self.last_subexpr_matches_ident.as_ref().unwrap(),
+            inner_unique_capture_idents,
+            count,
+        );
+        self.push_subexpr_matches("repeat", &block);
+    }
+
+    fn push_lit_repeat_range(
+        &mut self,
+        start: usize,
+        end: Bound<usize>,
+        inner_unique_capture_idents: &BTreeSet<Ident>,
+    ) {
+        if end == Bound::Excluded(start) {
+            self.push_empty_subexpr_matches("repeat", true);
+            return;
+        }
+        let inner_matches_ident = self.last_subexpr_matches_ident.as_ref().unwrap();
+        self.push_subexpr_matches(
+            "repeat",
+            &match end {
+                Bound::Included(end) => repeat::lit_non_empty_range_inclusive(
+                    inner_matches_ident,
+                    inner_unique_capture_idents,
+                    start,
+                    end,
+                ),
+                Bound::Excluded(end) => repeat::lit_non_empty_range(
+                    inner_matches_ident,
+                    inner_unique_capture_idents,
+                    start,
+                    end,
+                ),
+                Bound::Unbounded => {
+                    repeat::lit_range_from(inner_matches_ident, inner_unique_capture_idents, start)
+                }
+            },
+        );
+    }
+
     fn push_repeated_group(
         &mut self,
         group: Group,
         repeat: Repeat,
     ) -> syn::Result<BTreeSet<Ident>> {
         let unique_capture_idents = self.push_group(group)?;
-        let inner_matches_ident = self.last_subexpr_matches_ident.as_ref().unwrap();
-        let block = match &repeat {
+        match &repeat {
             Repeat::Exact(count) => {
-                let lit_count = expr_as_lit_int(count);
-                match lit_count {
-                    Some(count) => {
-                        repeat_lit_exact_block(inner_matches_ident, count, &unique_capture_idents)
-                            .map_err(|msg| syn::Error::new_spanned(count, msg))?
-                    }
-                    None => {
-                        return Err(syn::Error::new_spanned(
-                            count,
-                            "non-literal exact repetitions are not implemented yet",
-                        ))
-                    }
-                }
+                self.push_lit_repeat_exact(expr_as_lit_int(count)?, &unique_capture_idents);
             }
             Repeat::Range(range) => {
-                let lit_expr = |expr: &Option<_>| -> syn::Result<_> {
-                    Ok(match expr.as_deref() {
-                        Some(expr) => Some(expr_as_lit_int(expr).ok_or_else(|| {
-                            syn::Error::new_spanned(
-                                expr,
-                                "non-literal range repetitions are not implemented yet",
-                            )
-                        })?),
-                        None => None,
-                    })
-                };
-                let lit_from = lit_expr(&range.from)?.unwrap();
-                let lit_to = lit_expr(&range.to)?;
+                let start = expr_as_lit_int(range.from.as_deref().unwrap())?;
+                let maybe_end = range.to.as_deref().map(expr_as_lit_int).transpose()?;
                 let inclusive = matches!(&range.limits, RangeLimits::Closed(_));
-                match (inclusive, lit_from, lit_to) {
-                    (true, 0, Some(1)) | (false, 0, Some(2)) => {
-                        repeat_question_block(inner_matches_ident)
+                let end_bound = maybe_end
+                    .map(|to| {
+                        (if inclusive {
+                            Bound::Included
+                        } else {
+                            Bound::Excluded
+                        })(to)
+                    })
+                    .unwrap_or(Bound::Unbounded);
+                let check_range = |end, err_msg| {
+                    if start > end {
+                        Err(syn::Error::new_spanned(range, err_msg))
+                    } else {
+                        Ok(())
                     }
-                    (_, 0, None) => repeat_star_block(inner_matches_ident),
-                    (_, 1, None) => repeat_plus_block(inner_matches_ident),
-                    _ => repeat_lit_range_block(
-                        inner_matches_ident,
-                        lit_from,
-                        lit_to
-                            .map(|to| {
-                                (if inclusive {
-                                    Bound::Included
-                                } else {
-                                    Bound::Excluded
-                                })(to)
-                            })
-                            .unwrap_or(Bound::Unbounded),
-                        &unique_capture_idents,
-                    )
-                    .map_err(|msg| syn::Error::new_spanned(range, msg))?,
+                };
+                match end_bound {
+                    Bound::Included(end) => check_range(
+                        end,
+                        format!("invalid repetition range: at least `{start}` and at most `{end}`"),
+                    )?,
+                    Bound::Excluded(end) => check_range(
+                        end,
+                        format!(
+                            "invalid repetition range: at least `{start}` and less than `{end}`"
+                        ),
+                    )?,
+                    _ => (),
                 }
+                self.push_lit_repeat_range(start, end_bound, &unique_capture_idents);
             }
-        };
-        self.push_subexpr_matches(&block);
+        }
         Ok(unique_capture_idents)
     }
 
@@ -628,7 +458,7 @@ impl State {
         let capture_idents_xcpt_last_iter = capture_idents.iter().take(capture_idents.len() - 1);
         let last_capture_ident = capture_idents.last().unwrap();
 
-        self.push_subexpr_matches(&quote! {
+        self.push_subexpr_matches("capture", &quote! {
             let start = ::core::clone::Clone::clone(&self.__end);
             if !self.#inner_matches_ident() {
                 return false;
@@ -647,21 +477,24 @@ impl State {
     }
 
     fn push_test(&mut self, test: &Expr) {
-        self.push_subexpr_matches(&quote! {
-            let next = if let ::core::option::Option::Some(next) =
-                ::core::iter::Iterator::next(&mut self.__iter)
-            {
-                next
-            } else {
-                return false;
-            };
-            if (#test)(next.1) {
-                self.__end = next.0;
-                true
-            } else {
-                false
-            }
-        })
+        self.push_subexpr_matches(
+            "test",
+            &quote! {
+                let next = if let ::core::option::Option::Some(next) =
+                    ::core::iter::Iterator::next(&mut self.__iter)
+                {
+                    next
+                } else {
+                    return false;
+                };
+                if (#test)(next.1) {
+                    self.__end = next.0;
+                    true
+                } else {
+                    false
+                }
+            },
+        )
     }
 
     fn push_tree(&mut self, tree: Tree) -> syn::Result<BTreeSet<Ident>> {
