@@ -1,7 +1,7 @@
 use crate as hitori;
 pub struct Scream;
 
-#[hitori::impl_expr(and_expr_mut)]
+#[hitori::impl_expr]
 impl Expr<usize, char> for Scream {
     const PATTERN: _ = (
         // this repeats zero or more times

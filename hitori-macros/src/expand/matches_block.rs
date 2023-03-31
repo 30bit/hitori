@@ -263,43 +263,53 @@ impl State {
             self.push_empty_subexpr_matches(true);
             return Ok(unique_capture_idents);
         }
-
         let mut block = TokenStream::new();
-        for expr in all {
-            let branch_unique_capture_idents = self.push_tree(expr.try_into()?)?;
+
+        let mut branch = |expr: &Expr, is_last: bool| -> syn::Result<()> {
+            let mut branch_unique_capture_idents = self.push_tree(expr.try_into()?)?;
             let branch_matches_ident = &self.last_subexpr_matches_ident;
             if unique_capture_idents.is_empty() {
-                unique_capture_idents = branch_unique_capture_idents;
-                block.extend(quote! {
-                    #(
-                        let #unique_capture_idents =
-                            core::clone::Clone::clone(&self.__capture.#unique_capture_idents);
-                    )*
-                    if !self.#branch_matches_ident() {
+                if !is_last {
+                    block.extend(quote! {
                         #(
-                            self.__capture.#unique_capture_idents = #unique_capture_idents;
+                            let #branch_unique_capture_idents =
+                                core::clone::Clone::clone(&self.__capture.#branch_unique_capture_idents);
                         )*
-                        return false;
-                    }
-                })
-            } else {
-                for ident in branch_unique_capture_idents {
-                    if unique_capture_idents.insert(ident.clone()) {
-                        block.extend(quote! {
-                            let #ident = core::clone::Clone::clone(&self.__capture.#ident);
-                        });
-                    }
+                    })
                 }
                 block.extend(quote! {
+                    if !self.#branch_matches_ident() { return false; }
+                });
+                unique_capture_idents = branch_unique_capture_idents;
+            } else {
+                let undo = quote! {
                     if !self.#branch_matches_ident() {
                         #(
                             self.__capture.#unique_capture_idents = #unique_capture_idents;
                         )*
                         return false;
                     }
-                });
+                };
+                if is_last {
+                   unique_capture_idents.append(&mut branch_unique_capture_idents);
+                } else {
+                    for ident in branch_unique_capture_idents {
+                        if unique_capture_idents.insert(ident.clone()) {
+                            block.extend(quote! {
+                                let #ident = core::clone::Clone::clone(&self.__capture.#ident);
+                            });
+                        }
+                    }
+                }
+                block.extend(undo);
             }
+            Ok(())
+        };
+
+        for expr in all.iter().take(all.len() - 1) {
+            branch(expr, false)?;
         }
+        branch(all.last().unwrap(), true)?;
         block.extend(quote! { true });
         self.push_subexpr_matches(&block);
         Ok(unique_capture_idents)
@@ -314,7 +324,6 @@ impl State {
             self.push_empty_subexpr_matches(false);
             return Ok(unique_capture_idents);
         }
-
         let mut block = (any.len() > 1)
             .then(|| {
                 quote! {
@@ -330,7 +339,7 @@ impl State {
                 if self.#branch_matches_ident() {
                     return true;
                 } else {
-                    #reset_iter;
+                    #reset_iter
                 }
             });
             Ok(())
@@ -379,7 +388,7 @@ impl State {
         capture_idents: Punctuated<Ident, Token![,]>,
     ) -> syn::Result<BTreeSet<Ident>> {
         let mut unique_capture_idents = self.push_group(group)?;
-        if unique_capture_idents.is_empty() {
+        if capture_idents.is_empty() {
             return Ok(unique_capture_idents);
         }
 
@@ -388,7 +397,7 @@ impl State {
         let last_capture_ident = capture_idents.last().unwrap();
 
         self.push_subexpr_matches(&quote! {
-            let start = self.__end.clone();
+            let start = core::clone::Clone::clone(&self.__end);
             if !self.#inner_matches_ident() {
                 return false;
             }
@@ -408,7 +417,7 @@ impl State {
     fn push_test(&mut self, test: &Expr) {
         self.push_subexpr_matches(&quote! {
             let next = if let core::option::Option::Some(next) =
-                core::iter::Iterator::next(self.__iter)
+                core::iter::Iterator::next(&mut self.__iter)
             {
                 next
             } else {
@@ -488,7 +497,7 @@ impl<'a> Input<'a> {
                 #partial_impl_wrapper {
                     #impl_wrapper_block
                 }
-                let wrapper = #wrapper_ident {
+                let mut wrapper = #wrapper_ident {
                     __target: self,
                     __capture: core::default::Default::default(),
                     __end: start,

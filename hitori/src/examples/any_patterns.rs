@@ -1,7 +1,7 @@
 use crate as hitori;
 pub struct Float;
 
-#[hitori::impl_expr(and_expr_mut)]
+#[hitori::impl_expr]
 impl Expr<usize, char> for Float {
     const PATTERN: _ = (
         |ch| ch == 'f',

@@ -95,9 +95,8 @@ fn const_expr(items: Vec<ImplItem>) -> syn::Result<Expr> {
 pub struct Output {
     pub is_mut: bool,
     pub capture_vis: Visibility,
-    pub capture_options_ident: Ident,
+    pub capture_ident: Ident,
     pub capture_idx_ident: Ident,
-    pub capture_vecs_ident: Ident,
     pub self_ty: Box<Type>,
     pub trait_ident: Ident,
     pub iter_ident: Ident,
@@ -114,8 +113,6 @@ impl Output {
     fn new(is_mut: bool, args: Args, item: ItemImpl) -> syn::Result<Self> {
         let iter_ident = ident_not_in_generic_params(&item.generics.params, "I".into());
         let wrapper_ident = ident_not_in_generic_params(&item.generics.params, "Self_".into());
-        let capture_vecs_ident =
-            ident_not_in_generic_params(&item.generics.params, "CaptureVecs".into());
 
         let (trait_ident, [idx_ty, ch_ty]) = trait_ident_and_args(
             item.trait_
@@ -168,9 +165,8 @@ impl Output {
         const_expr(item.items).map(|expr| Output {
             is_mut,
             capture_vis: vis,
-            capture_options_ident: capture_ident,
+            capture_ident,
             capture_idx_ident,
-            capture_vecs_ident,
             self_ty: item.self_ty,
             trait_ident,
             iter_ident,

@@ -31,14 +31,14 @@ fn matches_sig(
 ) -> TokenStream {
     let mut_ = is_mut.then_some(<Token![mut]>::default());
     quote! {
-        fn #matches_ident<__I>(
+        fn #matches_ident<#iter_ident>(
             &#mut_ self,
             mut start: #idx_ty,
             iter: #iter_ident,
-        ) -> core::option::Option<
-            core::ops::RangeTo<#idx_ty>>,
+        ) -> core::option::Option<(
+            core::ops::RangeTo<#idx_ty>,
             <Self as #hitori_ident::ExprMut<#idx_ty, #ch_ty>>::Capture
-        >
+        )>
         where
             #iter_ident: core::iter::IntoIterator<Item = (#idx_ty, #ch_ty)>,
             #iter_ident::IntoIter: core::clone::Clone,
@@ -46,9 +46,7 @@ fn matches_sig(
 }
 
 fn type_capture(capture_ident: &Ident, idx_ty: &Type) -> TokenStream {
-    quote! {
-        type Capture = #capture_ident<#idx_ty>;
-    }
+    quote! { type Capture = #capture_ident<#idx_ty>; }
 }
 
 fn capture<'a>(
@@ -58,25 +56,39 @@ fn capture<'a>(
     default_idx_ty: Option<&Type>,
     field_idents: &BTreeSet<Ident>,
 ) -> TokenStream {
+    let (members, default_block, doc) = if field_idents.is_empty() {
+        (
+            quote! {( core::marker::PhantomData<#idx_ident> );},
+            quote! {( core::marker::PhantomData )},
+            Some(quote! { #[doc = "This is an empty struct"] }),
+        )
+    } else {
+        (
+            quote! {{
+                #(
+                    #vis #field_idents: core::option::Option<core::ops::Range<#idx_ident>>,
+                )*
+            }},
+            quote! {{
+                #(
+                    #field_idents: core::option::Option::None,
+                )*
+            }},
+            None,
+        )
+    };
     quote! {
+        #doc
         #[derive(
             core::clone::Clone,
             core::cmp::Eq,
             core::cmp::PartialEq,
             core::fmt::Debug,
         )]
-        #vis struct #ident<#idx_ident = #default_idx_ty> {
-            #(
-                #field_idents: core::option::Option<core::ops::Range<#idx_ident>>,
-            )*
-        }
+        #vis struct #ident<#idx_ident = #default_idx_ty> #members
         impl<#idx_ident> core::default::Default for #ident<#idx_ident> {
             fn default() -> Self {
-                Self {
-                    #(
-                        #field_idents: core::option::Option::None,
-                    )*
-                }
+                Self #default_block
             }
         }
     }
@@ -121,7 +133,7 @@ pub fn expand(parsed: parse::Output) -> syn::Result<TokenStream> {
         )
     };
 
-    let type_capture = type_capture(&parsed.capture_options_ident, &parsed.idx_ty);
+    let type_capture = type_capture(&parsed.capture_ident, &parsed.idx_ty);
     let (mut output, impl_decl, type_capture, matches_sig) = if parsed.is_mut {
         (
             TokenStream::new(),
@@ -154,7 +166,7 @@ pub fn expand(parsed: parse::Output) -> syn::Result<TokenStream> {
     } = matches_block::Input {
         hitori_ident: &hitori_ident,
         is_mut: parsed.is_mut,
-        capture_ident: &parsed.capture_options_ident,
+        capture_ident: &parsed.capture_ident,
         self_ty: &parsed.self_ty,
         iter_ident: &parsed.iter_ident,
         idx_ty: &parsed.idx_ty,
@@ -175,9 +187,9 @@ pub fn expand(parsed: parse::Output) -> syn::Result<TokenStream> {
 
     output.extend(capture(
         &parsed.capture_vis,
-        &parsed.capture_options_ident,
+        &parsed.capture_ident,
         &parsed.capture_idx_ident,
-        (!parsed.is_idx_generic).then_some(&parsed.idx_ty),
+        (!parsed.is_idx_generic).then(|| &parsed.idx_ty),
         &unique_capture_idents,
     ));
 
