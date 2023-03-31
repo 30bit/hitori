@@ -230,13 +230,20 @@ impl State {
         self.next_subexpr_index += 1;
     }
 
-    fn push_empty_subexpr_matches(&mut self) {
+    fn push_empty_subexpr_matches(&mut self, matches: bool) {
         self.set_next_subexpr();
         let ident = &self.last_subexpr_matches_ident;
-        self.impl_wrapper_block.extend(quote! {
+        let mut tokens = quote! {
             #[inline(always)]
-            fn #ident(&mut self) -> bool { true }
+            fn #ident(&mut self) -> bool
+        };
+        tokens.extend(if matches {
+            quote! {{ true }}
+        } else {
+            quote! {{ false }}
         });
+
+        self.impl_wrapper_block.extend(tokens);
     }
 
     fn push_subexpr_matches(&mut self, block: &TokenStream) {
@@ -252,6 +259,11 @@ impl State {
         all: &Punctuated<Expr, Token![,]>,
     ) -> syn::Result<BTreeSet<Ident>> {
         let mut unique_capture_idents = BTreeSet::new();
+        if all.is_empty() {
+            self.push_empty_subexpr_matches(true);
+            return Ok(unique_capture_idents);
+        }
+
         let mut block = TokenStream::new();
         for expr in all {
             let branch_unique_capture_idents = self.push_tree(expr.try_into()?)?;
@@ -260,7 +272,8 @@ impl State {
                 unique_capture_idents = branch_unique_capture_idents;
                 block.extend(quote! {
                     #(
-                        let #unique_capture_idents = self.__capture.#unique_capture_idents.clone();
+                        let #unique_capture_idents =
+                            core::clone::Clone::clone(&self.__capture.#unique_capture_idents);
                     )*
                     if !self.#branch_matches_ident() {
                         #(
@@ -273,7 +286,7 @@ impl State {
                 for ident in branch_unique_capture_idents {
                     if unique_capture_idents.insert(ident.clone()) {
                         block.extend(quote! {
-                            let #ident = self.__capture.#ident.clone();
+                            let #ident = core::clone::Clone::clone(&self.__capture.#ident);
                         });
                     }
                 }
@@ -296,16 +309,60 @@ impl State {
         &mut self,
         any: &Punctuated<Expr, Token![,]>,
     ) -> syn::Result<BTreeSet<Ident>> {
-        todo!()
+        let mut unique_capture_idents = BTreeSet::new();
+        if any.is_empty() {
+            self.push_empty_subexpr_matches(false);
+            return Ok(unique_capture_idents);
+        }
+
+        let mut block = (any.len() > 1)
+            .then(|| {
+                quote! {
+                    let cloned_iter = core::clone::Clone::clone(&self.__iter);
+                }
+            })
+            .unwrap_or_default();
+
+        let mut branch = |expr: &Expr, reset_iter: &TokenStream| -> syn::Result<()> {
+            unique_capture_idents.append(&mut self.push_tree(expr.try_into()?)?);
+            let branch_matches_ident = &self.last_subexpr_matches_ident;
+            block.extend(quote! {
+                if self.#branch_matches_ident() {
+                    return true;
+                } else {
+                    #reset_iter;
+                }
+            });
+            Ok(())
+        };
+
+        if any.len() > 2 {
+            let reset_iter = quote! {
+                self.__iter = core::clone::Clone::clone(&cloned_iter);
+            };
+            for expr in any.iter().take(any.len() - 2) {
+                branch(expr, &reset_iter)?;
+            }
+        }
+
+        if any.len() > 1 {
+            branch(
+                &any[any.len() - 2],
+                &quote! {
+                    self.__iter = cloned_iter;
+                },
+            )?;
+        }
+
+        branch(any.last().unwrap(), &quote! { false })?;
+
+        self.push_subexpr_matches(&block);
+        Ok(unique_capture_idents)
     }
 
     fn push_group(&mut self, group: Group) -> syn::Result<BTreeSet<Ident>> {
         match group {
             Group::Paren(paren) => self.push_tree(paren.try_into()?),
-            Group::All(empty) | Group::Any(empty) if empty.is_empty() => {
-                self.push_empty_subexpr_matches();
-                Ok(BTreeSet::new())
-            }
             Group::All(all) => self.push_group_all(all),
             Group::Any(any) => self.push_group_any(any),
         }
@@ -336,9 +393,11 @@ impl State {
                 return false;
             }
             #(
-                self.__capture.#capture_idents_xcpt_last_iter = Some(start.clone()..self.__end.clone());
+                self.__capture.#capture_idents_xcpt_last_iter =
+                    Some(core::clone::Clone::clone(&start)..core::clone::Clone::clone(&self.__end));
             )*
-            self.__capture.#last_capture_ident = Some(start..self.__end.clone());
+            self.__capture.#last_capture_ident =
+                Some(start..core::clone::Clone::clone(&self.__end));
             true
         });
 
@@ -348,7 +407,9 @@ impl State {
 
     fn push_test(&mut self, test: &Expr) {
         self.push_subexpr_matches(&quote! {
-            let next = if let core::option::Option::Some(next) = self.__iter.next() {
+            let next = if let core::option::Option::Some(next) =
+                core::iter::Iterator::next(self.__iter)
+            {
                 next
             } else {
                 return false;
