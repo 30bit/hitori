@@ -1,13 +1,13 @@
 use crate::utils::{
-    find_le_one_hitori_attr, hitori_attr_ident_eq_str, lifetimes_into_punctuated_unit_refs,
-    remove_generic_params_bounds, unique_ident,
+    eq_by_fmt, find_le_one_hitori_attr, hitori_attr_ident_eq_str,
+    lifetimes_into_punctuated_unit_refs, remove_generic_params_bounds, unique_ident,
 };
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote, ToTokens as _};
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, fmt::Write as _};
 use syn::{
-    parse::Parse, punctuated::Punctuated, Attribute, Expr, ExprRange, GenericParam, Token, Type,
-    WhereClause,
+    parse::Parse, punctuated::Punctuated, Attribute, Expr, ExprRange, GenericParam, RangeLimits,
+    Token, Type, WhereClause,
 };
 
 fn partial_impl_wrapper(
@@ -103,35 +103,72 @@ fn partial_impl_wrapper(
 }
 
 enum Repeat {
-    Question,
-    Star,
-    Plus,
     Exact(Expr),
     Range(ExprRange),
 }
 
 impl Parse for Repeat {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        Ok(if input.fork().parse::<Token![?]>().is_ok() {
-            Self::Question
-        } else if input.fork().parse::<Token![*]>().is_ok() {
-            Self::Star
-        } else if input.fork().parse::<Token![+]>().is_ok() {
-            Self::Plus
-        } else {
-            match input.parse::<Expr>() {
-                Ok(Expr::Range(range)) => Self::Range(range),
-                Ok(expr) => Self::Exact(expr),
-                Err(expr_err) => {
-                    let mut err = syn::Error::new_spanned(
-                        TokenStream::new(),
-                        "not a `*`, `+`, `?` or expression",
-                    );
-                    err.combine(expr_err);
-                    return Err(err);
+        input.parse::<Expr>().and_then(|expr| match expr {
+            Expr::Range(range) => {
+                if range.from.is_some() {
+                    Ok(Self::Range(range))
+                } else {
+                    let mut expected = String::with_capacity(3);
+                    expected.push('0');
+                    expected
+                        .write_fmt(format_args!("{}", range.limits.to_token_stream()))
+                        .unwrap();
+                    expected
+                        .write_fmt(format_args!("{}", range.to.to_token_stream()))
+                        .unwrap();
+                    Err(syn::Error::new_spanned(
+                        range,
+                        format!("repetition range must have a lower bound (e.g. `{expected}`)",),
+                    ))
                 }
             }
+            expr => Ok(Self::Exact(expr)),
         })
+    }
+}
+
+impl Repeat {
+    fn is_question(&self) -> bool {
+        match self {
+            Repeat::Range(ExprRange {
+                from: Some(from),
+                limits,
+                to,
+                ..
+            }) if eq_by_fmt(from, quote! { 0 }) => match limits {
+                RangeLimits::HalfOpen(_) => eq_by_fmt(to, quote! { 2 }),
+                RangeLimits::Closed(_) => eq_by_fmt(to, quote! { 1 }),
+            },
+            _ => false,
+        }
+    }
+
+    fn is_star(&self) -> bool {
+        matches!(
+            self,
+            Repeat::Range(ExprRange {
+                from: Some(from),
+                to: None,
+                ..
+            }) if eq_by_fmt(from, quote! { 0 })
+        )
+    }
+
+    fn is_plus(&self) -> bool {
+        matches!(
+            self,
+            Repeat::Range(ExprRange {
+                from: Some(from),
+                to: None,
+                ..
+            }) if eq_by_fmt(from, quote! { 1 })
+        )
     }
 }
 
@@ -205,11 +242,11 @@ fn repeat_exact_block(
 }
 
 fn repeat_range_block(
-    _inner_matches_ident: &Ident,
-    _range: &ExprRange,
-    _unique_capture_idents: &BTreeSet<Ident>,
+    inner_matches_ident: &Ident,
+    range: &ExprRange,
+    unique_capture_idents: &BTreeSet<Ident>,
 ) -> TokenStream {
-    unimplemented!()
+    quote! { todo!() }
 }
 
 enum HitoriAttribute {
@@ -460,9 +497,9 @@ impl State {
         let unique_capture_idents = self.push_group(group)?;
         let inner_matches_ident = self.last_subexpr_matches_ident.as_ref().unwrap();
         self.push_subexpr_matches(&match &repeat {
-            Repeat::Question => repeat_question_block(inner_matches_ident),
-            Repeat::Star => repeat_star_block(inner_matches_ident),
-            Repeat::Plus => repeat_plus_block(inner_matches_ident),
+            _ if repeat.is_question() => repeat_question_block(inner_matches_ident),
+            _ if repeat.is_star() => repeat_star_block(inner_matches_ident),
+            _ if repeat.is_plus() => repeat_plus_block(inner_matches_ident),
             Repeat::Exact(count) => {
                 repeat_exact_block(inner_matches_ident, count, &unique_capture_idents)
             }
@@ -565,44 +602,38 @@ impl<'a> Input<'a> {
     pub fn expand(self) -> syn::Result<Output> {
         let mut st = State::default();
         let unique_capture_idents = st.push_tree(self.expr.try_into()?)?;
+        let partial_impl_wrapper = partial_impl_wrapper(
+            self.is_mut,
+            self.capture_ident,
+            self.self_ty,
+            self.iter_ident,
+            self.idx_ty,
+            self.ch_ty,
+            self.wrapper_ident,
+            self.generic_params,
+            self.where_clause,
+        );
         let impl_wrapper_block = st.impl_wrapper_block;
-        let tokens = if impl_wrapper_block.is_empty() {
-            quote! {
-                (::core::option::Option::Some(..start), ::core::default::Default::default())
+        let last_subexpr_matches_ident = st.last_subexpr_matches_ident.unwrap();
+        let wrapper_ident = self.wrapper_ident;
+        let tokens = quote! {
+            #partial_impl_wrapper {
+                #impl_wrapper_block
             }
-        } else {
-            let partial_impl_wrapper = partial_impl_wrapper(
-                self.is_mut,
-                self.capture_ident,
-                self.self_ty,
-                self.iter_ident,
-                self.idx_ty,
-                self.ch_ty,
-                self.wrapper_ident,
-                self.generic_params,
-                self.where_clause,
-            );
-            let last_subexpr_matches_ident = st.last_subexpr_matches_ident;
-            let wrapper_ident = self.wrapper_ident;
-            quote! {
-                #partial_impl_wrapper {
-                    #impl_wrapper_block
-                }
-                let mut wrapper = #wrapper_ident {
-                    __target: self,
-                    __capture: ::core::default::Default::default(),
-                    __end: start,
-                    __iter: ::core::iter::IntoIterator::into_iter(iter),
-                    __phantom: ::core::marker::PhantomData,
-                };
-                if wrapper.#last_subexpr_matches_ident() {
-                    ::core::option::Option::Some((
-                        ..wrapper.__end,
-                        wrapper.__capture
-                    ))
-                } else {
-                    ::core::option::Option::None
-                }
+            let mut wrapper = #wrapper_ident {
+                __target: self,
+                __capture: ::core::default::Default::default(),
+                __end: start,
+                __iter: ::core::iter::IntoIterator::into_iter(iter),
+                __phantom: ::core::marker::PhantomData,
+            };
+            if wrapper.#last_subexpr_matches_ident() {
+                ::core::option::Option::Some((
+                    ..wrapper.__end,
+                    wrapper.__capture
+                ))
+            } else {
+                ::core::option::Option::None
             }
         };
         Ok(Output {
