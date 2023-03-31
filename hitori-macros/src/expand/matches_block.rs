@@ -241,11 +241,63 @@ fn repeat_exact_block(
     }
 }
 
+// TODO: must be on `State`
 fn repeat_range_block(
+    impl_block_toknens: &mut TokenStream,
     inner_matches_ident: &Ident,
     range: &ExprRange,
     unique_capture_idents: &BTreeSet<Ident>,
 ) -> TokenStream {
+    /*
+    let range_ident = unique_ident(&unique_capture_idents, "range");
+    let mut block = quote! { 
+        let #range_ident = #range;  
+        // Either `star < 0t` or `::core::ops::RangeInclusive::start(&#range_ident) < &0`
+        if #range_ident.start < 0 { return false }; 
+    };
+    if range.to.is_some() {
+        // Either Range or RangeInclusive
+        block.extend(quote! {
+            if ::core::ops::range::Range::is_empty(&#range_ident) {
+                return false;
+            }
+        });
+    }
+    let has_lower_bound = eq_by_fmt(range.from.as_ref().unwrap(), 0);
+    let mut inner_matches_owned_ident;
+    let inner_matches_ident = &self.last_subexpr_matches_ident;
+    if has_lower_bound {
+        inner_matches_owned_ident = self.last_subexpr_matches_ident.clone();
+        inner_matches_ident = &inner_matches_owned_ident;
+        block.extend(&repeat_exact_block(inner_matches_ident, &quote { #range_ident.start }, ));
+    } else if if range.to.is_some() {
+`       block.extend(&quote! {
+            #(
+            let #unique_capture_idents =
+                ::core::clone::Clone::clone(&self.__capture.#unique_capture_idents);
+            )*
+        });
+    }
+
+    if let Some(upper_bound) = range.to.as_ref() {
+        block.extend(quote! {
+            let mut cloned_iter = ::core::Clone::clone(&self.__iter);
+            // Don't clone last iter
+            for _ in range {
+                if self.#inner_matches_ident() {
+                     cloned_iter = :core::Clone::clone(&self.__iter);
+                } else {
+                    self.__iter = cloned_iter;
+                    return true;
+                }
+            }
+            true
+        });
+    } else {
+        block.extend(&repeat_star_block(inner_matches_ident));
+        block
+    }
+    */
     quote! { todo!() }
 }
 
@@ -496,17 +548,21 @@ impl State {
     ) -> syn::Result<BTreeSet<Ident>> {
         let unique_capture_idents = self.push_group(group)?;
         let inner_matches_ident = self.last_subexpr_matches_ident.as_ref().unwrap();
-        self.push_subexpr_matches(&match &repeat {
+        let block = match &repeat {
             _ if repeat.is_question() => repeat_question_block(inner_matches_ident),
             _ if repeat.is_star() => repeat_star_block(inner_matches_ident),
             _ if repeat.is_plus() => repeat_plus_block(inner_matches_ident),
             Repeat::Exact(count) => {
                 repeat_exact_block(inner_matches_ident, count, &unique_capture_idents)
             }
-            Repeat::Range(range) => {
-                repeat_range_block(inner_matches_ident, range, &unique_capture_idents)
-            }
-        });
+            Repeat::Range(range) => repeat_range_block(
+                &mut self.impl_wrapper_block,
+                inner_matches_ident,
+                range,
+                &unique_capture_idents,
+            ),
+        };
+        self.push_subexpr_matches(&block);
         Ok(unique_capture_idents)
     }
 
