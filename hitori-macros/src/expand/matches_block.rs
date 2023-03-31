@@ -1,6 +1,6 @@
 use crate::utils::{
     find_le_one_hitori_attr, hitori_attr_ident_eq_str, lifetimes_into_punctuated_unit_refs,
-    remove_generic_params_bounds,
+    remove_generic_params_bounds, unique_ident,
 };
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote, ToTokens as _};
@@ -54,7 +54,7 @@ fn partial_impl_wrapper(
             },
         );
         output.extend(quote! {
-            #iter_ident: core::iter::Iterator<Item = (#idx_ty, #ch_ty)> + core::clone::Clone,
+            #iter_ident: ::core::iter::Iterator<Item = (#idx_ty, #ch_ty)> + ::core::clone::Clone,
         });
         output
     };
@@ -67,10 +67,10 @@ fn partial_impl_wrapper(
            __capture: #capture_ident<#idx_ty>,
            __end: #idx_ty,
            __iter: #iter_ident,
-           __phantom: core::marker::PhantomData<(#phantom_data_params)>,
+           __phantom: ::core::marker::PhantomData<(#phantom_data_params)>,
        };
 
-       impl<#wrapper_params> core::ops::Deref
+       impl<#wrapper_params> ::core::ops::Deref
        for #wrapper_ident<#no_bounds_wrapper_params>
        #where_clause
        {
@@ -84,7 +84,7 @@ fn partial_impl_wrapper(
 
     if is_mut {
         output.extend(quote! {
-            impl<#wrapper_params> core::ops::DerefMut
+            impl<#wrapper_params> ::core::ops::DerefMut
             for #wrapper_ident<#no_bounds_wrapper_params>
             #where_clause
             {
@@ -111,9 +111,7 @@ enum Repeat {
 }
 
 impl Parse for Repeat {
-    #[allow(unreachable_code, unused_variables)]
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        return Err(input.error("repetitions are not implemented yet"));
         Ok(if input.fork().parse::<Token![?]>().is_ok() {
             Self::Question
         } else if input.fork().parse::<Token![*]>().is_ok() {
@@ -135,6 +133,83 @@ impl Parse for Repeat {
             }
         })
     }
+}
+
+fn repeat_question_block(inner_matches_ident: &Ident) -> TokenStream {
+    quote! {
+        let cloned_iter = ::core::clone::Clone::clone(&self.__iter);
+        if !self.#inner_matches_ident() {
+            self.__iter = cloned_iter;
+        }
+        true
+    }
+}
+
+fn repeat_star_block(inner_matches_ident: &Ident) -> TokenStream {
+    quote! {
+        let mut cloned_iter = ::core::clone::Clone::clone(&self.__iter);
+        while self.#inner_matches_ident() {
+            cloned_iter = ::core::clone::Clone::clone(&self.__iter);
+        }
+        self.__iter = cloned_iter;
+        true
+    }
+}
+
+fn repeat_plus_block(inner_matches_ident: &Ident) -> TokenStream {
+    quote! {
+        let mut cloned_iter = ::core::clone::Clone::clone(&self.__iter);
+        if self.#inner_matches_ident() {
+            cloned_iter = ::core::clone::Clone::clone(&self.__iter);
+        } else {
+            self.__iter = cloned_iter;
+            return false;
+        }
+        while self.#inner_matches_ident() {
+            cloned_iter = ::core::clone::Clone::clone(&self.__iter);
+        }
+        self.__iter = cloned_iter;
+        true
+    }
+}
+
+fn repeat_exact_block(
+    inner_matches_ident: &Ident,
+    count: &Expr,
+    unique_capture_idents: &BTreeSet<Ident>,
+) -> TokenStream {
+    let range_ident = unique_ident(unique_capture_idents.iter(), "range".into());
+    quote! {
+        let mut #range_ident = 0..(#count);
+        if ::core::ops::Range::is_empty(&#range_ident) {
+            return true;
+        }
+        #(
+            let #unique_capture_idents =
+                ::core::clone::Clone::clone(&self.__capture.#unique_capture_idents);
+        )*
+        if !self.#inner_matches_ident() {
+            return false;
+        }
+        #range_ident.start = 1;
+        for _ in #range_ident {
+            if !self.#inner_matches_ident() {
+                #(
+                    self.__capture.#unique_capture_idents = #unique_capture_idents;
+                )*
+                return false;
+            }
+        }
+        true
+    }
+}
+
+fn repeat_range_block(
+    _inner_matches_ident: &Ident,
+    _range: &ExprRange,
+    _unique_capture_idents: &BTreeSet<Ident>,
+) -> TokenStream {
+    unimplemented!()
 }
 
 enum HitoriAttribute {
@@ -273,7 +348,7 @@ impl State {
                     block.extend(quote! {
                         #(
                             let #branch_unique_capture_idents =
-                                core::clone::Clone::clone(&self.__capture.#branch_unique_capture_idents);
+                                ::core::clone::Clone::clone(&self.__capture.#branch_unique_capture_idents);
                         )*
                     })
                 }
@@ -291,12 +366,12 @@ impl State {
                     }
                 };
                 if is_last {
-                   unique_capture_idents.append(&mut branch_unique_capture_idents);
+                    unique_capture_idents.append(&mut branch_unique_capture_idents);
                 } else {
                     for ident in branch_unique_capture_idents {
                         if unique_capture_idents.insert(ident.clone()) {
                             block.extend(quote! {
-                                let #ident = core::clone::Clone::clone(&self.__capture.#ident);
+                                let #ident = ::core::clone::Clone::clone(&self.__capture.#ident);
                             });
                         }
                     }
@@ -327,7 +402,7 @@ impl State {
         let mut block = (any.len() > 1)
             .then(|| {
                 quote! {
-                    let cloned_iter = core::clone::Clone::clone(&self.__iter);
+                    let cloned_iter = ::core::clone::Clone::clone(&self.__iter);
                 }
             })
             .unwrap_or_default();
@@ -347,7 +422,7 @@ impl State {
 
         if any.len() > 2 {
             let reset_iter = quote! {
-                self.__iter = core::clone::Clone::clone(&cloned_iter);
+                self.__iter = ::core::clone::Clone::clone(&cloned_iter);
             };
             for expr in any.iter().take(any.len() - 2) {
                 branch(expr, &reset_iter)?;
@@ -377,12 +452,28 @@ impl State {
         }
     }
 
-    fn push_repeat(&mut self, group: Group, _repeat: Repeat) -> syn::Result<BTreeSet<Ident>> {
-        let _unique_capture_idents = self.push_group(group)?;
-        unimplemented!()
+    fn push_repeated_group(
+        &mut self,
+        group: Group,
+        repeat: Repeat,
+    ) -> syn::Result<BTreeSet<Ident>> {
+        let unique_capture_idents = self.push_group(group)?;
+        let inner_matches_ident = self.last_subexpr_matches_ident.as_ref().unwrap();
+        self.push_subexpr_matches(&match &repeat {
+            Repeat::Question => repeat_question_block(inner_matches_ident),
+            Repeat::Star => repeat_star_block(inner_matches_ident),
+            Repeat::Plus => repeat_plus_block(inner_matches_ident),
+            Repeat::Exact(count) => {
+                repeat_exact_block(inner_matches_ident, count, &unique_capture_idents)
+            }
+            Repeat::Range(range) => {
+                repeat_range_block(inner_matches_ident, range, &unique_capture_idents)
+            }
+        });
+        Ok(unique_capture_idents)
     }
 
-    fn push_capture(
+    fn push_captured_group(
         &mut self,
         group: Group,
         capture_idents: Punctuated<Ident, Token![,]>,
@@ -397,16 +488,16 @@ impl State {
         let last_capture_ident = capture_idents.last().unwrap();
 
         self.push_subexpr_matches(&quote! {
-            let start = core::clone::Clone::clone(&self.__end);
+            let start = ::core::clone::Clone::clone(&self.__end);
             if !self.#inner_matches_ident() {
                 return false;
             }
             #(
                 self.__capture.#capture_idents_xcpt_last_iter =
-                    Some(core::clone::Clone::clone(&start)..core::clone::Clone::clone(&self.__end));
+                    Some(::core::clone::Clone::clone(&start)..::core::clone::Clone::clone(&self.__end));
             )*
             self.__capture.#last_capture_ident =
-                Some(start..core::clone::Clone::clone(&self.__end));
+                Some(start..::core::clone::Clone::clone(&self.__end));
             true
         });
 
@@ -416,8 +507,8 @@ impl State {
 
     fn push_test(&mut self, test: &Expr) {
         self.push_subexpr_matches(&quote! {
-            let next = if let core::option::Option::Some(next) =
-                core::iter::Iterator::next(&mut self.__iter)
+            let next = if let ::core::option::Option::Some(next) =
+                ::core::iter::Iterator::next(&mut self.__iter)
             {
                 next
             } else {
@@ -436,9 +527,9 @@ impl State {
         match tree {
             Tree::Group(group, maybe_attr) => match maybe_attr {
                 Some(attr) => match attr {
-                    HitoriAttribute::Repeat(repeat) => self.push_repeat(group, repeat),
+                    HitoriAttribute::Repeat(repeat) => self.push_repeated_group(group, repeat),
                     HitoriAttribute::Capture(capture_idents) => {
-                        self.push_capture(group, capture_idents)
+                        self.push_captured_group(group, capture_idents)
                     }
                 },
                 None => self.push_group(group),
@@ -477,7 +568,7 @@ impl<'a> Input<'a> {
         let impl_wrapper_block = st.impl_wrapper_block;
         let tokens = if impl_wrapper_block.is_empty() {
             quote! {
-                (core::option::Option::Some(..start), core::default::Default::default())
+                (::core::option::Option::Some(..start), ::core::default::Default::default())
             }
         } else {
             let partial_impl_wrapper = partial_impl_wrapper(
@@ -499,18 +590,18 @@ impl<'a> Input<'a> {
                 }
                 let mut wrapper = #wrapper_ident {
                     __target: self,
-                    __capture: core::default::Default::default(),
+                    __capture: ::core::default::Default::default(),
                     __end: start,
-                    __iter: core::iter::IntoIterator::into_iter(iter),
-                    __phantom: core::marker::PhantomData,
+                    __iter: ::core::iter::IntoIterator::into_iter(iter),
+                    __phantom: ::core::marker::PhantomData,
                 };
                 if wrapper.#last_subexpr_matches_ident() {
-                    core::option::Option::Some((
+                    ::core::option::Option::Some((
                         ..wrapper.__end,
                         wrapper.__capture
                     ))
                 } else {
-                    core::option::Option::None
+                    ::core::option::Option::None
                 }
             }
         };

@@ -35,13 +35,13 @@ fn matches_sig(
             &#mut_ self,
             mut start: #idx_ty,
             iter: #iter_ident,
-        ) -> core::option::Option<(
-            core::ops::RangeTo<#idx_ty>,
+        ) -> ::core::option::Option<(
+            ::core::ops::RangeTo<#idx_ty>,
             <Self as #hitori_ident::ExprMut<#idx_ty, #ch_ty>>::Capture
         )>
         where
-            #iter_ident: core::iter::IntoIterator<Item = (#idx_ty, #ch_ty)>,
-            #iter_ident::IntoIter: core::clone::Clone,
+            #iter_ident: ::core::iter::IntoIterator<Item = (#idx_ty, #ch_ty)>,
+            #iter_ident::IntoIter: ::core::clone::Clone,
     }
 }
 
@@ -58,20 +58,20 @@ fn capture<'a>(
 ) -> TokenStream {
     let (members, default_block, doc) = if field_idents.is_empty() {
         (
-            quote! {( core::marker::PhantomData<#idx_ident> );},
-            quote! {( core::marker::PhantomData )},
+            quote! {( ::core::marker::PhantomData<#idx_ident> );},
+            quote! {( ::core::marker::PhantomData )},
             Some(quote! { #[doc = "This is an empty struct"] }),
         )
     } else {
         (
             quote! {{
                 #(
-                    #vis #field_idents: core::option::Option<core::ops::Range<#idx_ident>>,
+                    #vis #field_idents: ::core::option::Option<::core::ops::Range<#idx_ident>>,
                 )*
             }},
             quote! {{
                 #(
-                    #field_idents: core::option::Option::None,
+                    #field_idents: ::core::option::Option::None,
                 )*
             }},
             None,
@@ -80,13 +80,13 @@ fn capture<'a>(
     quote! {
         #doc
         #[derive(
-            core::clone::Clone,
-            core::cmp::Eq,
-            core::cmp::PartialEq,
-            core::fmt::Debug,
+            ::core::clone::Clone,
+            ::core::cmp::Eq,
+            ::core::cmp::PartialEq,
+            ::core::fmt::Debug,
         )]
         #vis struct #ident<#idx_ident = #default_idx_ty> #members
-        impl<#idx_ident> core::default::Default for #ident<#idx_ident> {
+        impl<#idx_ident> ::core::default::Default for #ident<#idx_ident> {
             fn default() -> Self {
                 Self #default_block
             }

@@ -115,12 +115,22 @@ pub fn generic_arg_try_into_type(arg: GenericArgument) -> syn::Result<Type> {
 
 pub fn ident_not_in_generic_params(
     params: &Punctuated<GenericParam, Token![,]>,
+    init: String,
+) -> Ident {
+    unique_ident(
+        params.iter().filter_map(|param| match param {
+            GenericParam::Type(TypeParam { ident, .. }) => Some(ident),
+            _ => None,
+        }),
+        init,
+    )
+}
+
+pub fn unique_ident<'a>(
+    idents: impl Iterator<Item = &'a Ident> + Clone,
     mut init: String,
 ) -> Ident {
-    while params.iter().any(|param| match param {
-        GenericParam::Type(TypeParam { ident, .. }) => ident == &init,
-        _ => false,
-    }) {
+    while idents.clone().any(|ident| ident == &init) {
         init.push('_');
     }
 

@@ -17,7 +17,7 @@
 //! ```
 //!
 //! # Repetitions (coming soon)
-//! ```compile_fail
+//! ```
 #![doc = include_example!("repetitions")]
 //!```
 //!
@@ -27,10 +27,12 @@
 mod all_patterns;
 mod any_patterns;
 mod capturing;
+mod repetitions;
 
 pub use all_patterns::*;
 pub use any_patterns::*;
 pub use capturing::*;
+pub use repetitions::*;
 
 macro_rules! include_example {
     ($name:literal) => {
