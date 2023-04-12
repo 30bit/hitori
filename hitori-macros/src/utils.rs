@@ -1,4 +1,4 @@
-use proc_macro2::{Ident, TokenStream};
+use proc_macro2::{Ident, Literal, TokenStream};
 use quote::{format_ident, quote, ToTokens};
 use std::{
     convert,
@@ -7,10 +7,10 @@ use std::{
     str::FromStr,
 };
 use syn::{
-    punctuated::Punctuated, Attribute, Binding, Expr, ExprLit, GenericArgument, GenericParam,
-    LifetimeDef, Lit, ParenthesizedGenericArguments, Path, PathArguments, ReturnType, Token, Type,
-    TypeImplTrait, TypeParam, TypeParamBound, TypeParen, TypePath, TypePtr, TypeReference,
-    TypeTraitObject,
+    punctuated::Punctuated, Attribute, BinOp, Binding, Expr, ExprBinary, ExprLit, GenericArgument,
+    GenericParam, LifetimeDef, Lit, ParenthesizedGenericArguments, Path, PathArguments, ReturnType,
+    Token, Type, TypeImplTrait, TypeParam, TypeParamBound, TypeParen, TypePath, TypePtr,
+    TypeReference, TypeTraitObject,
 };
 
 pub fn hitori_ident() -> Ident {
@@ -168,6 +168,46 @@ where
             lit: Lit::Int(int), ..
         }) => int.base10_parse(),
         _ => Err(syn::Error::new_spanned(expr, "not a literal int")),
+    }
+}
+
+pub fn expr_add_one_usize(expr: Expr) -> Expr {
+    Expr::Binary(ExprBinary {
+        attrs: vec![],
+        left: Box::new(expr),
+        op: BinOp::Add(Default::default()),
+        right: Box::new(Expr::Lit(ExprLit {
+            attrs: vec![],
+            lit: Lit::Int(Literal::usize_suffixed(1).into()),
+        })),
+    })
+}
+
+pub enum UsizeOrExpr {
+    Usize(usize),
+    Expr(Expr),
+}
+
+impl UsizeOrExpr {
+    pub fn from_lit(lit: &Lit) -> syn::Result<Self> {
+        match &lit {
+            Lit::Int(int) => Ok(Self::Usize(int.base10_parse()?)),
+            Lit::Str(s) => Ok(Self::Expr(s.parse()?)),
+            _ => Err(syn::Error::new_spanned(
+                lit,
+                "expected either a literal `usize` or an expression \
+                    within literal string",
+            )),
+        }
+    }
+}
+
+impl ToTokens for UsizeOrExpr {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        match self {
+            UsizeOrExpr::Usize(x) => x.to_tokens(tokens),
+            UsizeOrExpr::Expr(x) => x.to_tokens(tokens),
+        }
     }
 }
 
