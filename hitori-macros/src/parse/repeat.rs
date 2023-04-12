@@ -1,51 +1,22 @@
-use crate::utils::{expr_add_one_usize, path_eq_ident_str, UsizeOrExpr};
+use crate::utils::{expr_add_one_usize, expr_try_from_lit_int_or_lit_str_expr, path_eq_ident_str};
+use proc_macro2::Literal;
 use std::ops::Bound;
-use syn::{parse::Parse, punctuated::Punctuated, MetaNameValue, Token};
-
-struct InternalIn {
-    pub lo: Bound<UsizeOrExpr>,
-    pub hi: Bound<UsizeOrExpr>,
-}
-
-impl InternalIn {
-    fn unbounded() -> Self {
-        Self {
-            lo: Bound::Unbounded,
-            hi: Bound::Unbounded,
-        }
-    }
-}
-
-fn repeat_in_lo_as_included(lo: Bound<UsizeOrExpr>) -> UsizeOrExpr {
-    match lo {
-        Bound::Included(lo) => lo,
-        Bound::Excluded(UsizeOrExpr::Usize(lo)) => UsizeOrExpr::Usize(lo + 1),
-        Bound::Excluded(UsizeOrExpr::Expr(lo)) => UsizeOrExpr::Expr(expr_add_one_usize(lo)),
-        Bound::Unbounded => UsizeOrExpr::Usize(0),
-    }
-}
-
-fn repeat_in_hi_as_included(hi: Bound<UsizeOrExpr>) -> Option<UsizeOrExpr> {
-    match hi {
-        Bound::Included(hi) => Some(hi),
-        Bound::Excluded(UsizeOrExpr::Usize(hi)) => Some(UsizeOrExpr::Usize(hi + 1)),
-        Bound::Excluded(UsizeOrExpr::Expr(hi)) => Some(UsizeOrExpr::Expr(expr_add_one_usize(hi))),
-        Bound::Unbounded => None,
-    }
-}
+use syn::{parse::Parse, punctuated::Punctuated, Expr, ExprLit, Lit, MetaNameValue, Token};
 
 enum Internal {
-    Exact(UsizeOrExpr),
-    In(InternalIn),
+    Exact(Expr),
+    In { lo: Bound<Expr>, hi: Bound<Expr> },
 }
 
 impl Internal {
     fn set_parse_exact(
         repeat: &mut Option<Internal>,
-        name_value: &MetaNameValue,
+        name_value: MetaNameValue,
     ) -> syn::Result<()> {
         if repeat.is_none() {
-            *repeat = Some(Internal::Exact(UsizeOrExpr::from_lit(&name_value.lit)?));
+            *repeat = Some(Internal::Exact(expr_try_from_lit_int_or_lit_str_expr(
+                name_value.lit,
+            )?));
             Ok(())
         } else {
             Err(syn::Error::new_spanned(
@@ -57,21 +28,21 @@ impl Internal {
 
     fn set_parse_in_lo(
         repeat: &mut Option<Internal>,
-        name_value: &MetaNameValue,
-        bound: fn(UsizeOrExpr) -> Bound<UsizeOrExpr>,
+        name_value: MetaNameValue,
+        bound: fn(Expr) -> Bound<Expr>,
         err_msg: &str,
     ) -> syn::Result<()> {
         if repeat.is_none() {
-            *repeat = Some(Internal::In(InternalIn {
-                lo: bound(UsizeOrExpr::from_lit(&name_value.lit)?),
+            *repeat = Some(Internal::In {
+                lo: bound(expr_try_from_lit_int_or_lit_str_expr(name_value.lit)?),
                 hi: Bound::Unbounded,
-            }))
-        } else if let Some(Internal::In(InternalIn {
+            })
+        } else if let Some(Internal::In {
             lo: lo @ Bound::Unbounded,
             hi: _,
-        })) = repeat
+        }) = repeat
         {
-            *lo = bound(UsizeOrExpr::from_lit(&name_value.lit)?);
+            *lo = bound(expr_try_from_lit_int_or_lit_str_expr(name_value.lit)?);
         } else {
             return Err(syn::Error::new_spanned(&name_value.path, err_msg));
         }
@@ -80,21 +51,21 @@ impl Internal {
 
     fn set_parse_in_hi(
         repeat: &mut Option<Internal>,
-        name_value: &MetaNameValue,
-        bound: fn(UsizeOrExpr) -> Bound<UsizeOrExpr>,
+        name_value: MetaNameValue,
+        bound: fn(Expr) -> Bound<Expr>,
         err_msg: &str,
     ) -> syn::Result<()> {
         if repeat.is_none() {
-            *repeat = Some(Internal::In(InternalIn {
+            *repeat = Some(Internal::In {
                 lo: Bound::Unbounded,
-                hi: bound(UsizeOrExpr::from_lit(&name_value.lit)?),
-            }))
-        } else if let Some(Internal::In(InternalIn {
+                hi: bound(expr_try_from_lit_int_or_lit_str_expr(name_value.lit)?),
+            })
+        } else if let Some(Internal::In {
             lo: _,
             hi: hi @ Bound::Unbounded,
-        })) = repeat
+        }) = repeat
         {
-            *hi = bound(UsizeOrExpr::from_lit(&name_value.lit)?);
+            *hi = bound(expr_try_from_lit_int_or_lit_str_expr(name_value.lit)?);
         } else {
             return Err(syn::Error::new_spanned(&name_value.path, err_msg));
         }
@@ -107,7 +78,7 @@ impl Parse for Internal {
         let meta = Punctuated::<MetaNameValue, Token![,]>::parse_terminated(input)?;
         let mut output = None;
 
-        for name_value in &meta {
+        for name_value in meta {
             if path_eq_ident_str(&name_value.path, "eq") {
                 Self::set_parse_exact(&mut output, name_value)?;
             } else if path_eq_ident_str(&name_value.path, "lt") {
@@ -141,15 +112,18 @@ impl Parse for Internal {
             }
         }
 
-        Ok(output.unwrap_or_else(|| Internal::In(InternalIn::unbounded())))
+        Ok(output.unwrap_or_else(|| Internal::In {
+            lo: Bound::Unbounded,
+            hi: Bound::Unbounded,
+        }))
     }
 }
 
 pub enum Repeat {
-    Exact(UsizeOrExpr),
+    Exact(Expr),
     InInclusive {
-        lo: UsizeOrExpr,
-        hi: Option<UsizeOrExpr>,
+        lo_included: Expr,
+        hi_excluded: Option<Expr>,
     },
 }
 
@@ -157,9 +131,20 @@ impl From<Internal> for Repeat {
     fn from(repeat: Internal) -> Self {
         match repeat {
             Internal::Exact(exact) => Self::Exact(exact),
-            Internal::In(InternalIn { lo, hi }) => Self::InInclusive {
-                lo: repeat_in_lo_as_included(lo),
-                hi: repeat_in_hi_as_included(hi),
+            Internal::In { lo, hi } => Self::InInclusive {
+                lo_included: match lo {
+                    Bound::Included(lo) => lo,
+                    Bound::Excluded(lo) => expr_add_one_usize(lo),
+                    Bound::Unbounded => Expr::Lit(ExprLit {
+                        attrs: vec![],
+                        lit: Lit::Int(Literal::usize_unsuffixed(0).into()),
+                    }),
+                },
+                hi_excluded: match hi {
+                    Bound::Included(hi) => Some(expr_add_one_usize(hi)),
+                    Bound::Excluded(hi) => Some(hi),
+                    Bound::Unbounded => None,
+                },
             },
         }
     }

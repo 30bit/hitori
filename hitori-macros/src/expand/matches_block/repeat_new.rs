@@ -1,42 +1,43 @@
-use crate::{parse::repeat::Repeat, utils::UsizeOrExpr};
-use proc_macro2::TokenStream;
+use std::collections::BTreeSet;
+
+use crate::parse::repeat::Repeat;
+use proc_macro2::{Ident, TokenStream};
 use quote::quote;
 
-pub fn bounds_decl(repeat: &Repeat) -> TokenStream {
+fn bounds_decl(repeat: &Repeat) -> TokenStream {
     match repeat {
-        Repeat::Exact(lo) | Repeat::InInclusive { lo, hi: None } => {
-            let mut output = quote! {
-                let lo = #lo;
-            };
-            if matches!(lo, UsizeOrExpr::Expr(_)) {
-                output.extend(quote! {
-                    fn check_is_usize(_: usize) {}
-                    check_is_usize(lo);
-                })
+        Repeat::Exact(lo_included) | Repeat::InInclusive { lo_included, hi_excluded: None } => {
+            quote! {
+                let lo: usize = #lo_included;
             }
-            output
         }
-        Repeat::InInclusive { lo, hi: Some(hi) } => {
-            let mut output = quote! {
-                let lo = #lo;
-                let hi = #hi;
-            };
-            if matches!(lo, UsizeOrExpr::Expr(_)) | matches!(hi, UsizeOrExpr::Expr(_)) {
-                output.extend(quote! {
-                    fn check_is_usize(_: usize) {}
-                });
+        Repeat::InInclusive { lo_included, hi_excluded: Some(hi_excluded) } => {
+            quote! {
+                let lo: usize = #lo_included;
+                let hi: usize = #hi_excluded;
+                if lo > hi {
+                    return false;
+                }
             }
-            if matches!(lo, UsizeOrExpr::Expr(_)) {
-                output.extend(quote! {
-                    check_is_usize(lo);
-                });
+        }
+    }
+}
+
+fn lo_test(
+    inner_matches_ident: &Ident,
+    inner_unique_capture_idents: &BTreeSet<Ident>,
+) -> TokenStream {
+    quote! {
+        if lo != 0 {
+            let cloned_iter = ::core::clone::Clone::clone(&self.__iter);
+            if lo > 1 {
+
+            } else {
+                if !self.#inner_matches_ident() {
+                    self.__iter = cloned_iter;
+                    return false;
+                }
             }
-            if matches!(hi, UsizeOrExpr::Expr(_)) {
-                output.extend(quote! {
-                    check_is_usize(hi);
-                });
-            }
-            output
         }
     }
 }

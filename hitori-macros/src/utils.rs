@@ -8,9 +8,9 @@ use std::{
 };
 use syn::{
     punctuated::Punctuated, Attribute, BinOp, Binding, Expr, ExprBinary, ExprLit, GenericArgument,
-    GenericParam, LifetimeDef, Lit, ParenthesizedGenericArguments, Path, PathArguments, ReturnType,
-    Token, Type, TypeImplTrait, TypeParam, TypeParamBound, TypeParen, TypePath, TypePtr,
-    TypeReference, TypeTraitObject,
+    GenericParam, LifetimeDef, Lit, ParenthesizedGenericArguments, Path, PathArguments,
+    ReturnType, Token, Type, TypeImplTrait, TypeParam, TypeParamBound, TypeParen, TypePath,
+    TypePtr, TypeReference, TypeTraitObject,
 };
 
 pub fn hitori_ident() -> Ident {
@@ -183,31 +183,15 @@ pub fn expr_add_one_usize(expr: Expr) -> Expr {
     })
 }
 
-pub enum UsizeOrExpr {
-    Usize(usize),
-    Expr(Expr),
-}
-
-impl UsizeOrExpr {
-    pub fn from_lit(lit: &Lit) -> syn::Result<Self> {
-        match &lit {
-            Lit::Int(int) => Ok(Self::Usize(int.base10_parse()?)),
-            Lit::Str(s) => Ok(Self::Expr(s.parse()?)),
-            _ => Err(syn::Error::new_spanned(
-                lit,
-                "expected either a literal `usize` or an expression \
-                    within literal string",
-            )),
-        }
-    }
-}
-
-impl ToTokens for UsizeOrExpr {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        match self {
-            UsizeOrExpr::Usize(x) => x.to_tokens(tokens),
-            UsizeOrExpr::Expr(x) => x.to_tokens(tokens),
-        }
+pub fn expr_try_from_lit_int_or_lit_str_expr(lit: Lit) -> syn::Result<Expr> {
+    match &lit {
+        Lit::Int(int) => Ok(Expr::Lit(ExprLit { attrs: vec![], lit })),
+        Lit::Str(s) => s.parse(),
+        _ => Err(syn::Error::new_spanned(
+            lit,
+            "expected either a literal `usize` or an expression \
+                within literal string",
+        )),
     }
 }
 
