@@ -1,16 +1,11 @@
 use proc_macro2::{Ident, Literal, TokenStream};
 use quote::{format_ident, quote, ToTokens};
-use std::{
-    convert,
-    fmt::{Display, Write as _},
-    mem,
-    str::FromStr,
-};
+use std::{convert, fmt::Write as _, mem};
 use syn::{
     punctuated::Punctuated, Attribute, BinOp, Binding, Expr, ExprBinary, ExprLit, GenericArgument,
-    GenericParam, LifetimeDef, Lit, ParenthesizedGenericArguments, Path, PathArguments,
-    ReturnType, Token, Type, TypeImplTrait, TypeParam, TypeParamBound, TypeParen, TypePath,
-    TypePtr, TypeReference, TypeTraitObject,
+    GenericParam, LifetimeDef, Lit, ParenthesizedGenericArguments, Path, PathArguments, ReturnType,
+    Token, Type, TypeImplTrait, TypeParam, TypeParamBound, TypeParen, TypePath, TypePtr,
+    TypeReference, TypeTraitObject,
 };
 
 pub fn hitori_ident() -> Ident {
@@ -158,19 +153,6 @@ pub fn type_as_type_path(ty: &Type) -> Option<&TypePath> {
     }
 }
 
-pub fn expr_as_lit_int<N>(expr: &Expr) -> syn::Result<N>
-where
-    N: FromStr,
-    N::Err: Display,
-{
-    match expr {
-        Expr::Lit(ExprLit {
-            lit: Lit::Int(int), ..
-        }) => int.base10_parse(),
-        _ => Err(syn::Error::new_spanned(expr, "not a literal int")),
-    }
-}
-
 pub fn expr_add_one_usize(expr: Expr) -> Expr {
     Expr::Binary(ExprBinary {
         attrs: vec![],
@@ -185,7 +167,7 @@ pub fn expr_add_one_usize(expr: Expr) -> Expr {
 
 pub fn expr_try_from_lit_int_or_lit_str_expr(lit: Lit) -> syn::Result<Expr> {
     match &lit {
-        Lit::Int(int) => Ok(Expr::Lit(ExprLit { attrs: vec![], lit })),
+        Lit::Int(_) => Ok(Expr::Lit(ExprLit { attrs: vec![], lit })),
         Lit::Str(s) => s.parse(),
         _ => Err(syn::Error::new_spanned(
             lit,

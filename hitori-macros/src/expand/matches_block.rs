@@ -1,13 +1,15 @@
 mod repeat;
 mod state;
 
-use crate::utils::{
-    find_le_one_hitori_attr, hitori_attr_ident_eq_str, lifetimes_into_punctuated_unit_refs,
-    remove_generic_params_bounds,
+use crate::{
+    parse::{position::Position, repeat::Repeat},
+    utils::{
+        find_le_one_hitori_attr, hitori_attr_ident_eq_str, lifetimes_into_punctuated_unit_refs,
+        remove_generic_params_bounds,
+    },
 };
 use proc_macro2::{Ident, TokenStream};
 use quote::{quote, ToTokens as _};
-use repeat::Repeat;
 use state::State;
 use std::collections::BTreeSet;
 use syn::{punctuated::Punctuated, Attribute, Expr, GenericParam, Token, Type, WhereClause};
@@ -107,6 +109,7 @@ fn partial_impl_wrapper(
 enum HitoriAttribute {
     Repeat(Repeat),
     Capture(Punctuated<Ident, Token![,]>),
+    Position(Position),
 }
 
 impl HitoriAttribute {
@@ -114,37 +117,42 @@ impl HitoriAttribute {
         match find_le_one_hitori_attr(attrs) {
             Ok(Some(attr)) => Ok(Some(if hitori_attr_ident_eq_str(attr, "capture") {
                 Self::Capture(attr.parse_args_with(Punctuated::parse_terminated)?)
-            } else {
+            } else if hitori_attr_ident_eq_str(attr, "repeat") {
                 Self::Repeat(attr.parse_args()?)
+            } else if hitori_attr_ident_eq_str(attr, "position") {
+                Self::Position(attr.parse_args()?)
+            } else {
+                return Err(syn::Error::new_spanned(
+                    attr,
+                    "expected `capture`, or `repeat`, or `position`",
+                ));
             })),
             Ok(None) => Ok(None),
-            Err([first, second]) => {
-                let is_first_capture = hitori_attr_ident_eq_str(first, "capture");
-                let is_second_capture = hitori_attr_ident_eq_str(second, "capture");
-                Err(syn::Error::new_spanned(
-                    first,
-                    if is_first_capture {
-                        if is_second_capture {
-                            "to capture group into multiple destinations, \
-                            use single `capture` attribute and \
-                            add each identifier to its argument list \
-                            (e.g. `#[hitori::capture(a, b, c)] _group`)"
-                        } else {
-                            "to capture a repetition \
-                            surround it by parenthesis or square brackets \
-                            (e.g. `#[hitori::capture(cap)] ( #[hitori::repeat(*)] _group )`)"
-                        }
-                    } else if is_second_capture {
-                        "to repeat a captured group \
-                        surround it by parenthesis or square brackets \
-                        (e.g. `#[hitori::repeat(+)] ( #[hitori::capture(cap)] _group )`)"
-                    } else {
-                        "to repeat a repetition, \
-                        surround it by parenthesis or square brackets \
-                        (e.g. `#[hitori::repeat(+)] ( #[hitori::repeat(?)] _group )`)"
-                    },
-                ))
-            }
+            Err([first, second]) => Err(syn::Error::new_spanned(
+                first,
+                if hitori_attr_ident_eq_str(first, "capture")
+                    && hitori_attr_ident_eq_str(second, "capture")
+                {
+                    "to capture group into multiple destinations, \
+                    use single `capture` attribute and \
+                    add each identifier to its argument list \
+                    (e.g. `#[hitori::capture(a, b, c)] _group`)"
+                } else if hitori_attr_ident_eq_str(first, "position")
+                    && hitori_attr_ident_eq_str(second, "position")
+                    && {
+                        matches!(
+                            (first.parse_args(), second.parse_args()),
+                            (Ok(Position::First), Ok(Position::Last))
+                                | (Ok(Position::Last), Ok(Position::First))
+                        )
+                    }
+                {
+                    "to check that a group is both `first` and `last` \
+                    use `#[hitori::position(first, last)]`"
+                } else {
+                    "there cannot be two `hitori` attributes on a single group"
+                },
+            )),
         }
     }
 }

@@ -1,15 +1,9 @@
-use std::{collections::BTreeSet, ops::Bound};
-
+use super::{repeat, Group, HitoriAttribute, Tree};
+use crate::parse::{position::Position, repeat::Repeat};
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
-use syn::{punctuated::Punctuated, Expr, RangeLimits, Token};
-
-use crate::utils::expr_as_lit_int;
-
-use super::{
-    repeat::{self, Repeat},
-    Group, HitoriAttribute, Tree,
-};
+use std::collections::BTreeSet;
+use syn::{punctuated::Punctuated, Expr, Token};
 
 #[derive(Default)]
 pub struct State {
@@ -174,103 +168,20 @@ impl State {
         }
     }
 
-    fn push_lit_repeat_exact(
-        &mut self,
-        count: usize,
-        inner_unique_capture_idents: &BTreeSet<Ident>,
-    ) {
-        if count == 0 {
-            self.push_empty_subexpr_matches("repeat", true);
-            return;
-        }
-
-        let block = repeat::lit_exact(
-            self.last_subexpr_matches_ident.as_ref().unwrap(),
-            inner_unique_capture_idents,
-            count,
-        );
-        self.push_subexpr_matches("repeat", &block);
-    }
-
-    fn push_lit_repeat_range(
-        &mut self,
-        start: usize,
-        end: Bound<usize>,
-        inner_unique_capture_idents: &BTreeSet<Ident>,
-    ) {
-        if end == Bound::Excluded(start) {
-            self.push_empty_subexpr_matches("repeat", true);
-            return;
-        }
-        let inner_matches_ident = self.last_subexpr_matches_ident.as_ref().unwrap();
-        self.push_subexpr_matches(
-            "repeat",
-            &match end {
-                Bound::Included(end) => repeat::lit_non_empty_range_inclusive(
-                    inner_matches_ident,
-                    inner_unique_capture_idents,
-                    start,
-                    end,
-                ),
-                Bound::Excluded(end) => repeat::lit_non_empty_range(
-                    inner_matches_ident,
-                    inner_unique_capture_idents,
-                    start,
-                    end,
-                ),
-                Bound::Unbounded => {
-                    repeat::lit_range_from(inner_matches_ident, inner_unique_capture_idents, start)
-                }
-            },
-        );
-    }
-
     fn push_repeated_group(
         &mut self,
         group: Group,
         repeat: Repeat,
     ) -> syn::Result<BTreeSet<Ident>> {
         let unique_capture_idents = self.push_group(group)?;
-        match &repeat {
-            Repeat::Exact(count) => {
-                self.push_lit_repeat_exact(expr_as_lit_int(count)?, &unique_capture_idents);
-            }
-            Repeat::Range(range) => {
-                let start = expr_as_lit_int(range.from.as_deref().unwrap())?;
-                let maybe_end = range.to.as_deref().map(expr_as_lit_int).transpose()?;
-                let inclusive = matches!(&range.limits, RangeLimits::Closed(_));
-                let end_bound = maybe_end
-                    .map(|to| {
-                        (if inclusive {
-                            Bound::Included
-                        } else {
-                            Bound::Excluded
-                        })(to)
-                    })
-                    .unwrap_or(Bound::Unbounded);
-                let check_range = |end, err_msg| {
-                    if start > end {
-                        Err(syn::Error::new_spanned(range, err_msg))
-                    } else {
-                        Ok(())
-                    }
-                };
-                match end_bound {
-                    Bound::Included(end) => check_range(
-                        end,
-                        format!("invalid repetition range: at least `{start}` and at most `{end}`"),
-                    )?,
-                    Bound::Excluded(end) => check_range(
-                        end,
-                        format!(
-                            "invalid repetition range: at least `{start}` and less than `{end}`"
-                        ),
-                    )?,
-                    _ => (),
-                }
-                self.push_lit_repeat_range(start, end_bound, &unique_capture_idents);
-            }
-        }
+        self.push_subexpr_matches(
+            "repeat",
+            &repeat::expand_block(
+                &repeat,
+                &self.last_subexpr_matches_ident.as_ref().unwrap(),
+                &unique_capture_idents,
+            ),
+        );
         Ok(unique_capture_idents)
     }
 
@@ -306,6 +217,24 @@ impl State {
         Ok(unique_capture_idents)
     }
 
+    fn push_positioned_group(
+        &mut self,
+        group: Group,
+        position: Position,
+    ) -> syn::Result<BTreeSet<Ident>> {
+        let unique_capture_idents = self.push_group(group)?;
+        if matches!(position, Position::First | Position::FirstAndLast) {
+            // self.is_first && self.inner_subexpr_matches()
+        }
+        if matches!(position, Position::Last | Position::FirstAndLast) {
+            // Don't need to fuse
+            // - if it was ? then iter is intact
+            // - otherwise there was a test and it passed (iter advanced)
+            // self.inner_subexpr_matches() && self.__iter.next().is_none()
+        }
+        Ok(unique_capture_idents)
+    }
+
     fn push_test(&mut self, test: &Expr) {
         self.push_subexpr_matches(
             "test",
@@ -334,6 +263,9 @@ impl State {
                     HitoriAttribute::Repeat(repeat) => self.push_repeated_group(group, repeat),
                     HitoriAttribute::Capture(capture_idents) => {
                         self.push_captured_group(group, capture_idents)
+                    }
+                    HitoriAttribute::Position(position) => {
+                        self.push_positioned_group(group, position)
                     }
                 },
                 None => self.push_group(group),

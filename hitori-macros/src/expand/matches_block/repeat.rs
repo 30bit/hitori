@@ -106,7 +106,7 @@ fn none_hi_test(
     }
 }
 
-pub fn expand(
+pub fn expand_block(
     repeat: &Repeat,
     inner_matches_ident: &Ident,
     inner_unique_capture_idents: &BTreeSet<Ident>,
