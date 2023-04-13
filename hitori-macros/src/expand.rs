@@ -162,7 +162,7 @@ pub fn expand(parsed: parse::Output) -> syn::Result<TokenStream> {
 
     let matches_block::Output {
         tokens: matches_block,
-        unique_capture_idents,
+        inner_capture_idents,
     } = matches_block::Input {
         hitori_ident: &hitori_ident,
         is_mut: parsed.is_mut,
@@ -190,7 +190,7 @@ pub fn expand(parsed: parse::Output) -> syn::Result<TokenStream> {
         &parsed.capture_ident,
         &parsed.capture_idx_ident,
         (!parsed.is_idx_generic).then(|| &parsed.idx_ty),
-        &unique_capture_idents,
+        &inner_capture_idents,
     ));
 
     Ok(output)

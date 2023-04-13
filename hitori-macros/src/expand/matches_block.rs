@@ -1,5 +1,6 @@
 mod repeat;
 mod state;
+mod cache;
 
 use crate::{
     parse::{position::Position, repeat::Repeat},
@@ -70,6 +71,7 @@ fn partial_impl_wrapper(
            __target: &'a #mut_ #self_ty,
            __capture: #capture_ident<#idx_ty>,
            __end: #idx_ty,
+           __is_first: bool,
            __iter: #iter_ident,
            __phantom: ::core::marker::PhantomData<(#phantom_data_params)>,
        };
@@ -191,7 +193,7 @@ impl<'a> TryFrom<&'a Expr> for Tree<'a> {
 
 pub struct Output {
     pub tokens: TokenStream,
-    pub unique_capture_idents: BTreeSet<Ident>,
+    pub inner_capture_idents: BTreeSet<Ident>,
 }
 
 pub struct Input<'a> {
@@ -211,7 +213,7 @@ pub struct Input<'a> {
 impl<'a> Input<'a> {
     pub fn expand(self) -> syn::Result<Output> {
         let mut st = State::default();
-        let unique_capture_idents = st.push_tree(self.expr.try_into()?)?;
+        let inner_capture_idents = st.push_tree(self.expr.try_into()?)?;
         let partial_impl_wrapper = partial_impl_wrapper(
             self.is_mut,
             self.capture_ident,
@@ -224,7 +226,7 @@ impl<'a> Input<'a> {
             self.where_clause,
         );
         let impl_wrapper_block = st.impl_wrapper_block;
-        let last_subexpr_matches_ident = st.last_subexpr_matches_ident.unwrap();
+        let last_subexpr_matches_ident = st.prev_subexpr_matches_ident.unwrap();
         let wrapper_ident = self.wrapper_ident;
         let tokens = quote! {
             #partial_impl_wrapper {
@@ -234,6 +236,7 @@ impl<'a> Input<'a> {
                 __target: self,
                 __capture: ::core::default::Default::default(),
                 __end: start,
+                __is_first: true,
                 __iter: ::core::iter::IntoIterator::into_iter(iter),
                 __phantom: ::core::marker::PhantomData,
             };
@@ -248,7 +251,7 @@ impl<'a> Input<'a> {
         };
         Ok(Output {
             tokens,
-            unique_capture_idents,
+            inner_capture_idents,
         })
     }
 }
