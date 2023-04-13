@@ -1,165 +1,131 @@
+use std::collections::BTreeSet;
+
+use crate::parse::repeat::Repeat;
 use proc_macro2::{Ident, TokenStream};
-use quote::{quote, ToTokens as _};
-use std::{collections::BTreeSet, fmt::Write as _};
-use syn::{parse::Parse, Expr, ExprRange};
+use quote::quote;
 
-pub enum Repeat {
-    Exact(Expr),
-    Range(ExprRange),
-}
-
-impl Parse for Repeat {
-    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        input.parse::<Expr>().and_then(|expr| match expr {
-            Expr::Range(range) => {
-                if range.from.is_some() {
-                    Ok(Self::Range(range))
-                } else {
-                    let mut expected = String::with_capacity(3);
-                    expected.push('0');
-                    expected
-                        .write_fmt(format_args!("{}", range.limits.to_token_stream()))
-                        .unwrap();
-                    expected
-                        .write_fmt(format_args!("{}", range.to.to_token_stream()))
-                        .unwrap();
-                    Err(syn::Error::new_spanned(
-                        range,
-                        format!("repetition range must have a lower bound (e.g. `{expected}`)",),
-                    ))
-                }
+fn bounds_decl(repeat: &Repeat) -> TokenStream {
+    match repeat {
+        Repeat::Exact(lo_included)
+        | Repeat::InInclusive {
+            lo_included,
+            hi_excluded: None,
+        } => {
+            quote! {
+                let lo: usize = #lo_included;
             }
-            expr => Ok(Self::Exact(expr)),
-        })
-    }
-}
-
-fn lit_partial_exact(
-    inner_matches_ident: &Ident,
-    inner_unique_capture_idents: &BTreeSet<Ident>,
-    count: usize,
-) -> TokenStream {
-    let mut tokens = if count != 0 {
-        quote! {
-            let cloned_iter = ::core::clone::Clone::clone(&self.__iter);
         }
-    } else {
-        TokenStream::new()
-    };
-    if count > 1 {
-        tokens.extend(quote! {
-            #(
-                let #inner_unique_capture_idents =
-                    ::core::clone::Clone::clone(&self.__capture.#inner_unique_capture_idents);
-            )*
-        });
-    }
-    if count != 0 {
-        tokens.extend(quote! {
-            if !self.#inner_matches_ident() {
-                self.__iter = cloned_iter;
-                return false;
-            }
-        });
-    }
-    if count > 1 {
-        tokens.extend(quote! {
-            for _ in 1..#count {
-                if !self.#inner_matches_ident() {
-                    self.__iter = cloned_iter;
-                    #(
-                        self.__capture.#inner_unique_capture_idents = #inner_unique_capture_idents;
-                    )*
+        Repeat::InInclusive {
+            lo_included,
+            hi_excluded: Some(hi_excluded),
+        } => {
+            quote! {
+                let lo: usize = #lo_included;
+                let hi: usize = #hi_excluded;
+                if lo >= hi {
                     return false;
                 }
             }
-        })
+        }
     }
-    tokens
 }
 
-fn lit_in_non_empty(
-    inner_matches_ident: &Ident,
-    start: usize,
-    end: usize,
-    inclusive: bool,
-) -> TokenStream {
-    let mut tokens = if let Some(for_end) = match inclusive {
-        true if start != end => Some(end),
-        false if start + 1 != end => Some(end - 1),
-        _ => None,
-    } {
-        quote! {
-            let mut cloned_iter = ::core::clone::Clone::clone(&self.__iter);
-            for _ in #start..#for_end {
+fn lo_test(inner_matches_ident: &Ident) -> TokenStream {
+    quote! {
+        if lo != 0 {
+            if !self.#inner_matches_ident() {
+                return false;
+            }
+            for _ in 1..lo {
                 if !self.#inner_matches_ident() {
-                    self.__iter = cloned_iter;
-                    return true;
+                    return false;
                 }
-                cloned_iter = ::core::clone::Clone::clone(&self.__iter);
             }
         }
-    } else {
-        quote! {
-            let cloned_iter = ::core::clone::Clone::clone(&self.__iter);
+    }
+}
+
+fn some_hi_test(
+    inner_matches_ident: &Ident,
+    inner_unique_capture_idents: &BTreeSet<Ident>,
+) -> TokenStream {
+    quote! {
+        if lo + 1 == hi {
+            return true;
         }
-    };
-    tokens.extend(quote! {
+        let mut cloned_iter = ::core::clone::Clone::clone(&self.__iter);
+        #(
+            let mut #inner_unique_capture_idents =
+                ::core::clone::Clone::clone(&self.__capture.#inner_unique_capture_idents);
+        )*
+        for _ in lo..(hi - 1) {
+            if self.#inner_matches_ident() {
+                cloned_iter = ::core::clone::Clone::clone(&self.__iter);
+                #(
+                    #inner_unique_capture_idents =
+                        ::core::clone::Clone::clone(&self.__capture.#inner_unique_capture_idents);
+                )*
+            } else {
+                self.__iter = cloned_iter;
+                #(
+                    self.__capture.#inner_unique_capture_idents = #inner_unique_capture_idents;
+                )*
+                return true;
+            }
+        }
         if !self.#inner_matches_ident() {
             self.__iter = cloned_iter;
+            #(
+                self.__capture.#inner_unique_capture_idents = #inner_unique_capture_idents;
+            )*
         }
-        true
-    });
-    tokens
+    }
 }
 
-pub fn lit_exact(
+fn none_hi_test(
     inner_matches_ident: &Ident,
     inner_unique_capture_idents: &BTreeSet<Ident>,
-    count: usize,
 ) -> TokenStream {
-    let mut tokens = lit_partial_exact(inner_matches_ident, inner_unique_capture_idents, count);
-    tokens.extend(quote! { true });
-    tokens
-}
-
-pub fn lit_non_empty_range_inclusive(
-    inner_matches_ident: &Ident,
-    inner_unique_capture_idents: &BTreeSet<Ident>,
-    start: usize,
-    end: usize,
-) -> TokenStream {
-    assert!(start <= end, "bug");
-    let mut tokens = lit_partial_exact(inner_matches_ident, inner_unique_capture_idents, start);
-    tokens.extend(lit_in_non_empty(inner_matches_ident, start, end, true));
-    tokens
-}
-
-pub fn lit_non_empty_range(
-    inner_matches_ident: &Ident,
-    inner_unique_capture_idents: &BTreeSet<Ident>,
-    start: usize,
-    end: usize,
-) -> TokenStream {
-    assert!(start < end, "bug");
-    let mut tokens = lit_partial_exact(inner_matches_ident, inner_unique_capture_idents, start);
-    tokens.extend(lit_in_non_empty(inner_matches_ident, start, end, false));
-    tokens
-}
-
-pub fn lit_range_from(
-    inner_matches_ident: &Ident,
-    inner_unique_capture_idents: &BTreeSet<Ident>,
-    start: usize,
-) -> TokenStream {
-    let mut block = lit_partial_exact(inner_matches_ident, inner_unique_capture_idents, start);
-    block.extend(quote! {
+    quote! {
         let mut cloned_iter = ::core::clone::Clone::clone(&self.__iter);
+        #(
+            let mut #inner_unique_capture_idents =
+                ::core::clone::Clone::clone(&self.__capture.#inner_unique_capture_idents);
+        )*
         while self.#inner_matches_ident() {
             cloned_iter = ::core::clone::Clone::clone(&self.__iter);
+            #(
+                #inner_unique_capture_idents =
+                    ::core::clone::Clone::clone(&self.__capture.#inner_unique_capture_idents);
+            )*
         }
         self.__iter = cloned_iter;
-        true
-    });
-    block
+        #(
+            self.__capture.#inner_unique_capture_idents = #inner_unique_capture_idents;
+        )*
+    }
+}
+
+pub fn expand(
+    repeat: &Repeat,
+    inner_matches_ident: &Ident,
+    inner_unique_capture_idents: &BTreeSet<Ident>,
+) -> TokenStream {
+    let mut output = bounds_decl(repeat);
+    output.extend(lo_test(inner_matches_ident));
+    output.extend(
+        if matches!(
+            repeat,
+            Repeat::InInclusive {
+                hi_excluded: Some(_),
+                ..
+            }
+        ) {
+            some_hi_test(inner_matches_ident, inner_unique_capture_idents)
+        } else {
+            none_hi_test(inner_matches_ident, inner_unique_capture_idents)
+        },
+    );
+    output.extend(quote! { true });
+    output
 }
