@@ -1,15 +1,52 @@
 use crate::utils::unique_ident;
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
-use std::collections::BTreeSet;
 
-pub struct VarIdents {
+pub struct CaptureVars<C>(C);
+
+impl<'a, C: Iterator<Item = &'a Ident> + Clone> CaptureVars<C> {
+    pub fn new<I: IntoIterator<IntoIter = C>>(capture_idents: I) -> Self {
+        Self(capture_idents.into_iter())
+    }
+
+    pub fn cache(&self) -> TokenStream {
+        let idents = self.0.clone();
+        quote! {
+            #(
+                let mut #idents =
+                    ::core::clone::Clone::clone(&self.__capture.#idents);
+            )*
+        }
+    }
+
+    pub fn update(&self) -> TokenStream {
+        let idents = self.0.clone();
+        quote! {
+            #(
+                #idents =
+                    ::core::clone::Clone::clone(&self.__capture.#idents);
+            )*
+        }
+    }
+
+    pub fn restore(&self) -> TokenStream {
+        let idents = self.0.clone();
+        quote! {
+            #(
+                self.__capture.#idents = #idents;
+            )*
+        }
+    }
+}
+
+
+pub struct OtherVars {
     iter: Ident,
     is_first: Ident,
     end: Ident,
 }
 
-impl VarIdents {
+impl OtherVars {
     pub fn unique_in<'a, C>(capture_idents: C) -> Self
     where
         C: IntoIterator<Item = &'a Ident>,
@@ -55,41 +92,15 @@ impl VarIdents {
             self.__end = #end;
         }
     }
-}
 
-pub struct CaptureIdents<C>(C);
-
-impl<'a, C: Iterator<Item = &'a Ident> + Clone> CaptureIdents<C> {
-    pub fn new<I: IntoIterator<IntoIter = C>>(capture_idents: I) -> Self {
-        Self(capture_idents.into_iter())
-    }
-
-    pub fn cache(&self) -> TokenStream {
-        let idents = self.0.clone();
+    pub fn restore_clone(&self) -> TokenStream {
+        let iter = &self.iter;
+        let is_first = &self.is_first;
+        let end = &self.end;
         quote! {
-            #(
-                let mut #idents =
-                    ::core::clone::Clone::clone(&self.__capture.#idents);
-            )*
-        }
-    }
-
-    pub fn update(&self) -> TokenStream {
-        let idents = self.0.clone();
-        quote! {
-            #(
-                #idents =
-                    ::core::clone::Clone::clone(&self.__capture.#idents);
-            )*
-        }
-    }
-
-    pub fn restore(&self) -> TokenStream {
-        let idents = self.0.clone();
-        quote! {
-            #(
-                self.__capture.#idents = #idents;
-            )*
+            self.__iter = ::core::clone::Clone::clone(#iter);
+            self.__is_first = #is_first;
+            self.__end = ::core::clone::Clone::clone(#end);
         }
     }
 }

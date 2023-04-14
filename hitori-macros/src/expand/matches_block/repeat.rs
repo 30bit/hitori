@@ -45,14 +45,23 @@ fn lo_test(inner_matches_ident: &Ident) -> TokenStream {
     }
 }
 
+fn cache_update_restore(inner_capture_idents: &BTreeSet<Ident>) -> [TokenStream; 3] {
+    let other_vars = cache::OtherVars::unique_in(inner_capture_idents);
+    let capture_vars = cache::CaptureVars::new(inner_capture_idents);
+    let mut cache = other_vars.cache();
+    cache.extend(capture_vars.cache());
+    let mut update = other_vars.update();
+    update.extend(capture_vars.update());
+    let mut restore = other_vars.restore();
+    restore.extend(capture_vars.restore());
+    [cache, update, restore]
+}
+
 fn some_hi_test(
     inner_matches_ident: &Ident,
     inner_capture_idents: &BTreeSet<Ident>,
 ) -> TokenStream {
-    let cache_var_idents = cache::VarIdents::unique_in(inner_capture_idents);
-    let cache = cache_var_idents.cache(inner_capture_idents);
-    let cache_update = cache_var_idents.update(inner_capture_idents);
-    let cache_restore = cache_var_idents.restore(inner_capture_idents);
+    let [cache, cache_update, cache_restore] = cache_update_restore(inner_capture_idents);
     quote! {
         if lo + 1 == hi {
             return true;
@@ -76,10 +85,7 @@ fn none_hi_test(
     inner_matches_ident: &Ident,
     inner_capture_idents: &BTreeSet<Ident>,
 ) -> TokenStream {
-    let cache_var_idents = cache::VarIdents::unique_in(inner_capture_idents);
-    let cache = cache_var_idents.cache(inner_capture_idents);
-    let cache_update = cache_var_idents.update(inner_capture_idents);
-    let cache_restore = cache_var_idents.restore(inner_capture_idents);
+    let [cache, cache_update, cache_restore] = cache_update_restore(inner_capture_idents);
     quote! {
         #cache
         while self.#inner_matches_ident() {

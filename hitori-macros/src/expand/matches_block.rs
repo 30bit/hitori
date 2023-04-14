@@ -66,6 +66,8 @@ fn partial_impl_wrapper(
 
     let mut_ = is_mut.then_some(<Token![mut]>::default());
 
+    // TODO: don't add `__is_first` unless 
+    // `HitoriAttribute::Position(First | FirstAndLast)` is present
     let mut output = quote! {
        struct #wrapper_ident<#wrapper_params> #where_clause {
            __target: &'a #mut_ #self_ty,
@@ -118,6 +120,7 @@ impl HitoriAttribute {
     fn find(attrs: &[Attribute]) -> syn::Result<Option<Self>> {
         match find_le_one_hitori_attr(attrs) {
             Ok(Some(attr)) => Ok(Some(if hitori_attr_ident_eq_str(attr, "capture") {
+                // TODO: sanity check that the same variable isn't used twice
                 Self::Capture(attr.parse_args_with(Punctuated::parse_terminated)?)
             } else if hitori_attr_ident_eq_str(attr, "repeat") {
                 Self::Repeat(attr.parse_args()?)
