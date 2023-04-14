@@ -215,6 +215,7 @@ impl<'a> Input<'a> {
     pub fn expand(self) -> syn::Result<Output> {
         let mut st = State::default();
         let inner_capture_idents = st.push_tree(self.expr.try_into()?)?;
+        let hitori_ident = self.hitori_ident;
         let partial_impl_wrapper = partial_impl_wrapper(
             self.is_mut,
             self.capture_ident,
@@ -237,15 +238,17 @@ impl<'a> Input<'a> {
                 __target: self,
                 __capture: ::core::default::Default::default(),
                 __end: start,
-                __is_first: true,
+                __is_first: is_first,
                 __iter: ::core::iter::IntoIterator::into_iter(iter),
                 __phantom: ::core::marker::PhantomData,
             };
             if wrapper.#last_subexpr_matches_ident() {
-                ::core::option::Option::Some((
-                    ..wrapper.__end,
-                    wrapper.__capture
-                ))
+                ::core::option::Option::Some(#hitori_ident::Matched {
+                    end: wrapper.__end,
+                    capture: wrapper.__capture,
+                    iter_remainder: wrapper.__iter,
+                    advanced_iter: !wrapper.__is_first,
+                })
             } else {
                 ::core::option::Option::None
             }

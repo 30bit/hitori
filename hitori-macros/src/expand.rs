@@ -34,11 +34,13 @@ fn matches_sig(
         fn #matches_ident<#iter_ident>(
             &#mut_ self,
             mut start: #idx_ty,
+            is_first: bool,
             iter: #iter_ident,
-        ) -> ::core::option::Option<(
-            ::core::ops::RangeTo<#idx_ty>,
-            <Self as #hitori_ident::ExprMut<#idx_ty, #ch_ty>>::Capture
-        )>
+        ) -> ::core::option::Option<hitori_ident::Matched<
+            $idx_ty,
+            <Self as #hitori_ident::ExprMut<#idx_ty, #ch_ty>>::Capture,
+            #iter_ident::IntoIter
+        >
         where
             #iter_ident: ::core::iter::IntoIterator<Item = (#idx_ty, #ch_ty)>,
             #iter_ident::IntoIter: ::core::clone::Clone,
@@ -100,7 +102,7 @@ fn derived_impl_expr_mut_matches_block(
     ch_ty: &Type,
 ) -> TokenStream {
     quote! {
-        <Self as #hitori_ident::Expr<#idx_ty, #ch_ty>>::matches(self, start, iter)
+        <Self as #hitori_ident::Expr<#idx_ty, #ch_ty>>::matches(self, start, is_first, iter)
     }
 }
 
