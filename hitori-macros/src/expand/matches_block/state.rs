@@ -180,13 +180,28 @@ impl State {
     ) -> syn::Result<BTreeSet<Ident>> {
         let inner_capture_idents = self.push_group(group)?;
         if matches!(position, Position::First | Position::FirstAndLast) {
-            // self.is_first && self.inner_subexpr_matches()
+            let inner_subexpr_matches = self.unwrap_prev_subexpr_matches_ident();
+            self.push_subexpr_matches(
+                "first",
+                &quote! {
+                    self.__is_first && self.#inner_subexpr_matches()
+                },
+            );
         }
         if matches!(position, Position::Last | Position::FirstAndLast) {
-            // Don't need to fuse
-            // - if it was ? then iter is intact
-            // - otherwise there was a test and it passed (iter advanced)
-            // self.inner_subexpr_matches() && self.__iter.next().is_none()
+            let inner_subexpr_matches = self.unwrap_prev_subexpr_matches_ident();
+            self.push_subexpr_matches(
+                "last",
+                &quote! {
+                    if !self.#inner_subexpr_matches() {
+                        return false
+                    }
+                    let iter = ::core::clone::Clone::clone(&self.__iter);
+                    let is_last = self.__iter.next().is_none();
+                    self.__iter = iter;
+                    is_last
+                },
+            );
         }
         Ok(inner_capture_idents)
     }

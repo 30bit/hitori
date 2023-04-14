@@ -66,8 +66,6 @@ fn partial_impl_wrapper(
 
     let mut_ = is_mut.then_some(<Token![mut]>::default());
 
-    // TODO: don't add `__is_first` unless 
-    // `HitoriAttribute::Position(First | FirstAndLast)` is present
     let mut output = quote! {
        struct #wrapper_ident<#wrapper_params> #where_clause {
            __target: &'a #mut_ #self_ty,
