@@ -39,102 +39,76 @@ impl State {
     ) -> syn::Result<BTreeSet<Ident>> {
         let mut inner_capture_idents = BTreeSet::new();
         let mut block = TokenStream::new();
+        let mut new_branch_capture_idents = vec![];
 
         for expr in all {
-            inner_capture_idents.append(&mut self.push_tree(expr.try_into()?)?);
+            let branch_capture_idents = self.push_tree(expr.try_into()?)?;
             let branch_matches_ident = self.unwrap_prev_subexpr_matches_ident();
+
+            new_branch_capture_idents.clear();
+            for ident in branch_capture_idents {
+                if inner_capture_idents.insert(ident.clone()) {
+                    new_branch_capture_idents.push(ident);
+                }
+            }
+            block.extend(cache::Capture::new(&new_branch_capture_idents).cache());
+
+            let capture_restore = cache::Capture::new(&inner_capture_idents).restore();
             block.extend(quote! {
                 if !self.#branch_matches_ident() {
+                    #capture_restore
                     return false;
                 }
             });
         }
-        block.extend(quote! { true });
 
+        block.extend(quote! { true });
         self.push_subexpr_matches("all", &block);
         Ok(inner_capture_idents)
     }
 
-    // TODO: instead of restoring after each branch mismatch,
-    // restore if branch matches using `CaptureVars` containing 
-    // `inner_capture_idents.difference(branch_capture_idents)`
     fn push_group_any(
         &mut self,
         any: &Punctuated<Expr, Token![,]>,
     ) -> syn::Result<BTreeSet<Ident>> {
-        let mut branch_capture_idents_and_subexpr_matches = any
-            .iter()
-            .map(|expr| {
-                expr.try_into()
-                    .and_then(|tree| self.push_tree(tree))
-                    .map(|capture_idents| {
-                        (
-                            capture_idents,
-                            self.unwrap_prev_subexpr_matches_ident().clone(),
-                        )
-                    })
-            })
-            .collect::<syn::Result<Vec<_>>>()?;
-        let cache_other_vars = cache::OtherVars::unique_in(
-            branch_capture_idents_and_subexpr_matches
-                .iter()
-                .flat_map(|(capture_idents, _)| capture_idents),
-        );
+        let vars = cache::Vars::default();
 
-        let mut inner_capture_idents = BTreeSet::new();
         let mut block = TokenStream::new();
         if any.len() > 1 {
-            block.extend(cache_other_vars.cache());
+            block.extend(vars.cache());
         }
+        let mut inner_capture_idents = BTreeSet::new();
 
-        let mut capture_restoring_branch =
-            |branch_capture_idents: &mut _,
-             branch_subexpr_matches: &_,
-             cache_other_vars_restore: &_| {
-                let cache_capture_vars = cache::CaptureVars::new(&*branch_capture_idents);
-                let capture_vars_cache = cache_capture_vars.cache();
-                let capture_vars_restore = cache_capture_vars.restore();
+        let mut restoring_branch =
+            |expr: &Expr, cache_other_vars_restore: &TokenStream| -> syn::Result<()> {
+                inner_capture_idents.append(&mut self.push_tree(expr.try_into()?)?);
+                let branch_subexpr_matches = self.unwrap_prev_subexpr_matches_ident();
                 block.extend(quote! {
-                    #capture_vars_cache
                     if self.#branch_subexpr_matches() {
                         return true;
                     }
                     #cache_other_vars_restore
-                    #capture_vars_restore
                 });
-                inner_capture_idents.append(branch_capture_idents);
+                Ok(())
             };
 
         if any.len() > 2 {
-            let cache_other_vars_restore = cache_other_vars.restore_clone();
-            for (branch_capture_idents, branch_subexpr_matches) in
-                &mut branch_capture_idents_and_subexpr_matches[..any.len() - 2]
-            {
-                capture_restoring_branch(
-                    branch_capture_idents,
-                    branch_subexpr_matches,
-                    &cache_other_vars_restore,
-                );
+            let vars_restore = vars.restore_clone();
+            for expr in any.iter().take(any.len() - 2) {
+                restoring_branch(expr, &vars_restore)?;
             }
         }
         if any.len() > 1 {
-            let (branch_capture_idents, branch_subexpr_matches) =
-                &mut branch_capture_idents_and_subexpr_matches[any.len() - 2];
-            capture_restoring_branch(
-                branch_capture_idents,
-                branch_subexpr_matches,
-                &cache_other_vars.restore(),
-            );
+            restoring_branch(&any[any.len() - 2], &vars.restore())?;
         }
         if any.len() != 0 {
-            let (branch_capture_idents, branch_subexpr_matches) =
-                &mut branch_capture_idents_and_subexpr_matches[any.len() - 1];
+            inner_capture_idents.append(&mut self.push_tree(any.last().unwrap().try_into()?)?);
+            let branch_subexpr_matches = self.unwrap_prev_subexpr_matches_ident();
             block.extend(quote! {
                 if self.#branch_subexpr_matches() {
                     return true;
                 }
             });
-            inner_capture_idents.append(branch_capture_idents);
         }
 
         block.extend(quote! { false });

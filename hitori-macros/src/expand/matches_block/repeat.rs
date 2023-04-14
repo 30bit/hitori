@@ -30,68 +30,59 @@ fn bounds_decl(repeat: &Repeat) -> TokenStream {
     }
 }
 
-fn lo_test(inner_matches_ident: &Ident) -> TokenStream {
+fn lo_test(inner_matches_ident: &Ident, inner_capture_idents: &BTreeSet<Ident>) -> TokenStream {
+    let capture = cache::Capture::new(inner_capture_idents);
+    let capture_cache = capture.cache();
+    let capture_restore = capture.restore();
     quote! {
-        if lo != 0 {
+        #capture_cache
+        for _ in 0..lo {
             if !self.#inner_matches_ident() {
+                #capture_restore
                 return false;
-            }
-            for _ in 1..lo {
-                if !self.#inner_matches_ident() {
-                    return false;
-                }
             }
         }
     }
 }
 
-fn cache_update_restore(inner_capture_idents: &BTreeSet<Ident>) -> [TokenStream; 3] {
-    let other_vars = cache::OtherVars::unique_in(inner_capture_idents);
-    let capture_vars = cache::CaptureVars::new(inner_capture_idents);
-    let mut cache = other_vars.cache();
-    cache.extend(capture_vars.cache());
-    let mut update = other_vars.update();
-    update.extend(capture_vars.update());
-    let mut restore = other_vars.restore();
-    restore.extend(capture_vars.restore());
-    [cache, update, restore]
+fn vars_cache_update_restore(inner_capture_idents: &BTreeSet<Ident>) -> [TokenStream; 3] {
+    let vars = cache::Vars::unique_in(inner_capture_idents);
+    [vars.cache(), vars.update(), vars.restore()]
 }
 
 fn some_hi_test(
     inner_matches_ident: &Ident,
-    inner_capture_idents: &BTreeSet<Ident>,
+    [vars_cache, vars_update, vars_restore]: &[TokenStream; 3],
 ) -> TokenStream {
-    let [cache, cache_update, cache_restore] = cache_update_restore(inner_capture_idents);
     quote! {
         if lo + 1 == hi {
             return true;
         }
-        #cache
+        #vars_cache
         for _ in lo..(hi - 1) {
             if self.#inner_matches_ident() {
-                #cache_update
+                #vars_update
             } else {
-                #cache_restore
+                #vars_restore
                 return true;
             }
         }
         if !self.#inner_matches_ident() {
-            #cache_restore
+            #vars_restore
         }
     }
 }
 
 fn none_hi_test(
     inner_matches_ident: &Ident,
-    inner_capture_idents: &BTreeSet<Ident>,
+    [vars_cache, vars_update, vars_restore]: &[TokenStream; 3],
 ) -> TokenStream {
-    let [cache, cache_update, cache_restore] = cache_update_restore(inner_capture_idents);
     quote! {
-        #cache
+        #vars_cache
         while self.#inner_matches_ident() {
-            #cache_update
+            #vars_update
         }
-        #cache_restore
+        #vars_restore
     }
 }
 
@@ -101,20 +92,15 @@ pub fn expand_block(
     inner_capture_idents: &BTreeSet<Ident>,
 ) -> TokenStream {
     let mut output = bounds_decl(repeat);
-    output.extend(lo_test(inner_matches_ident));
-    output.extend(
-        if matches!(
-            repeat,
-            Repeat::InInclusive {
-                hi_excluded: Some(_),
-                ..
-            }
-        ) {
-            some_hi_test(inner_matches_ident, inner_capture_idents)
+    output.extend(lo_test(inner_matches_ident, inner_capture_idents));
+    if let Repeat::InInclusive { hi_excluded, .. } = repeat {
+        let vars_streams = vars_cache_update_restore(inner_capture_idents);
+        output.extend(if hi_excluded.is_some() {
+            some_hi_test(inner_matches_ident, &vars_streams)
         } else {
-            none_hi_test(inner_matches_ident, inner_capture_idents)
-        },
-    );
+            none_hi_test(inner_matches_ident, &vars_streams)
+        });
+    }
     output.extend(quote! { true });
     output
 }

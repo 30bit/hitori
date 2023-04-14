@@ -1,10 +1,10 @@
 use crate::utils::unique_ident;
 use proc_macro2::{Ident, TokenStream};
-use quote::quote;
+use quote::{format_ident, quote};
 
-pub struct CaptureVars<C>(C);
+pub struct Capture<C>(C);
 
-impl<'a, C: Iterator<Item = &'a Ident> + Clone> CaptureVars<C> {
+impl<'a, C: Iterator<Item = &'a Ident> + Clone> Capture<C> {
     pub fn new<I: IntoIterator<IntoIter = C>>(capture_idents: I) -> Self {
         Self(capture_idents.into_iter())
     }
@@ -14,16 +14,6 @@ impl<'a, C: Iterator<Item = &'a Ident> + Clone> CaptureVars<C> {
         quote! {
             #(
                 let mut #idents =
-                    ::core::clone::Clone::clone(&self.__capture.#idents);
-            )*
-        }
-    }
-
-    pub fn update(&self) -> TokenStream {
-        let idents = self.0.clone();
-        quote! {
-            #(
-                #idents =
                     ::core::clone::Clone::clone(&self.__capture.#idents);
             )*
         }
@@ -39,20 +29,29 @@ impl<'a, C: Iterator<Item = &'a Ident> + Clone> CaptureVars<C> {
     }
 }
 
-
-pub struct OtherVars {
+pub struct Vars {
     iter: Ident,
     is_first: Ident,
     end: Ident,
 }
 
-impl OtherVars {
-    pub fn unique_in<'a, C>(capture_idents: C) -> Self
+impl Default for Vars {
+    fn default() -> Self {
+        Self {
+            iter: format_ident!("iter"),
+            is_first: format_ident!("is_first"),
+            end: format_ident!("end"),
+        }
+    }
+}
+
+impl Vars {
+    pub fn unique_in<'a, I>(idents: I) -> Self
     where
-        C: IntoIterator<Item = &'a Ident>,
-        C::IntoIter: Clone,
+        I: IntoIterator<Item = &'a Ident>,
+        I::IntoIter: Clone,
     {
-        let capture_idents = capture_idents.into_iter();
+        let capture_idents = idents.into_iter();
         Self {
             iter: unique_ident(capture_idents.clone(), "iter".into()),
             is_first: unique_ident(capture_idents.clone(), "is_first".into()),
