@@ -1,16 +1,32 @@
-use core::ops::RangeTo;
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+pub struct Matched<Idx, C, I> {
+    pub end: Idx,
+    pub capture: C,
+    pub iter_remainder: I,
+    pub advanced_iter: bool,
+}
 
 pub trait ExprMut<Idx, Ch> {
     type Capture;
 
-    fn matches_mut<I>(&mut self, start: Idx, iter: I) -> Option<(RangeTo<Idx>, Self::Capture)>
+    fn matches_mut<I>(
+        &mut self,
+        start: Idx,
+        is_first: bool,
+        iter: I,
+    ) -> Option<Matched<Idx, Self::Capture, I::IntoIter>>
     where
         I: IntoIterator<Item = (Idx, Ch)>,
         I::IntoIter: Clone;
 }
 
 pub trait Expr<Idx, Ch>: ExprMut<Idx, Ch> {
-    fn matches<I>(&self, start: Idx, iter: I) -> Option<(RangeTo<Idx>, Self::Capture)>
+    fn matches<I>(
+        &self,
+        start: Idx,
+        is_first: bool,
+        iter: I,
+    ) -> Option<Matched<Idx, Self::Capture, I::IntoIter>>
     where
         I: IntoIterator<Item = (Idx, Ch)>,
         I::IntoIter: Clone;
@@ -25,13 +41,14 @@ macro_rules! impl_mut_for_mut {
             fn matches_mut<I>(
                 &mut self,
                 start: Idx,
+                is_first: bool,
                 iter: I,
-            ) -> Option<(RangeTo<Idx>, Self::Capture)>
+            ) -> Option<Matched<Idx, Self::Capture, I::IntoIter>>
             where
                 I: IntoIterator<Item = (Idx, Ch)>,
                 I::IntoIter: Clone,
             {
-                E::matches_mut(self, start, iter)
+                E::matches_mut(self, start, is_first, iter)
             }
         }
     };
@@ -55,12 +72,17 @@ macro_rules! impl_for_const {
             $(type $capture = E::Capture;)?
 
             #[inline]
-            fn $matches<I>(&$($mut)?self, start: Idx, iter: I) -> Option<(RangeTo<Idx>, Self::Capture)>
+            fn $matches<I>(
+                &$($mut)?self,
+                start: Idx,
+                is_first: bool,
+                iter: I
+            ) -> Option<Matched<Idx, Self::Capture, I::IntoIter>>
             where
                 I: IntoIterator<Item = (Idx, Ch)>,
                 I::IntoIter: Clone,
             {
-                E::matches(self, start, iter)
+                E::matches(self, start, is_first, iter)
             }
         }
     };
