@@ -65,7 +65,7 @@ impl Vars {
         let end = &self.end;
         quote! {
             let mut #iter = ::core::clone::Clone::clone(&self.__iter);
-            let mut #is_first = ::core::clone::Clone::clone(&self.__is_first);
+            let mut #is_first = self.__is_first;
             let mut #end = ::core::clone::Clone::clone(&self.__end);
         }
     }
@@ -76,7 +76,7 @@ impl Vars {
         let end = &self.end;
         quote! {
             #iter = ::core::clone::Clone::clone(&self.__iter);
-            #is_first = ::core::clone::Clone::clone(&self.__is_first);
+            #is_first = self.__is_first;
             #end = ::core::clone::Clone::clone(&self.__end);
         }
     }

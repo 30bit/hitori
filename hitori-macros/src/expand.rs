@@ -28,19 +28,22 @@ fn matches_sig(
     iter_ident: &Ident,
     idx_ty: &Type,
     ch_ty: &Type,
+    inline: bool,
 ) -> TokenStream {
-    let mut_ = is_mut.then_some(<Token![mut]>::default());
+    let inline = inline.then(|| quote! { #[inline] });
+    let mut_ = is_mut.then(|| <Token![mut]>::default());
     quote! {
+        #inline
         fn #matches_ident<#iter_ident>(
             &#mut_ self,
             mut start: #idx_ty,
             is_first: bool,
             iter: #iter_ident,
-        ) -> ::core::option::Option<hitori_ident::Matched<
-            $idx_ty,
+        ) -> ::core::option::Option<#hitori_ident::Matched<
+            #idx_ty,
             <Self as #hitori_ident::ExprMut<#idx_ty, #ch_ty>>::Capture,
-            #iter_ident::IntoIter
-        >
+            #iter_ident::IntoIter,
+        >>
         where
             #iter_ident: ::core::iter::IntoIterator<Item = (#idx_ty, #ch_ty)>,
             #iter_ident::IntoIter: ::core::clone::Clone,
@@ -119,7 +122,7 @@ pub fn expand(parsed: parse::Output) -> syn::Result<TokenStream> {
             parsed.where_clause.as_ref(),
         )
     };
-    let matches_sig = |is_mut| {
+    let matches_sig = |is_mut, inline| {
         let matches_ident = if is_mut {
             format_ident!("matches_mut")
         } else {
@@ -132,6 +135,7 @@ pub fn expand(parsed: parse::Output) -> syn::Result<TokenStream> {
             &parsed.iter_ident,
             &parsed.idx_ty,
             &parsed.ch_ty,
+            inline,
         )
     };
 
@@ -141,12 +145,12 @@ pub fn expand(parsed: parse::Output) -> syn::Result<TokenStream> {
             TokenStream::new(),
             impl_decl(&parsed.trait_ident),
             Some(type_capture),
-            matches_sig(true),
+            matches_sig(true, false),
         )
     } else {
         let impl_expr_decl = impl_decl(&parsed.trait_ident);
         let impl_expr_mut_decl = impl_decl(&format_ident!("ExprMut"));
-        let impl_expr_mut_matches_sig = matches_sig(true);
+        let impl_expr_mut_matches_sig = matches_sig(true, true);
         let impl_expr_mut_matches_block =
             derived_impl_expr_mut_matches_block(&hitori_ident, &parsed.idx_ty, &parsed.ch_ty);
         (
@@ -158,7 +162,7 @@ pub fn expand(parsed: parse::Output) -> syn::Result<TokenStream> {
             },
             impl_expr_decl,
             None,
-            matches_sig(false),
+            matches_sig(false, false),
         )
     };
 

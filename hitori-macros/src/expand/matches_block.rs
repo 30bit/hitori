@@ -1,12 +1,12 @@
+mod cache;
 mod repeat;
 mod state;
-mod cache;
 
 use crate::{
     parse::{position::Position, repeat::Repeat},
     utils::{
-        find_le_one_hitori_attr, hitori_attr_ident_eq_str, lifetimes_into_punctuated_unit_refs,
-        remove_generic_params_bounds,
+        eq_by_fmt, find_le_one_hitori_attr, hitori_attr_ident_eq_str,
+        lifetimes_into_punctuated_unit_refs, remove_generic_params_bounds,
     },
 };
 use proc_macro2::{Ident, TokenStream};
@@ -118,10 +118,25 @@ impl HitoriAttribute {
     fn find(attrs: &[Attribute]) -> syn::Result<Option<Self>> {
         match find_le_one_hitori_attr(attrs) {
             Ok(Some(attr)) => Ok(Some(if hitori_attr_ident_eq_str(attr, "capture") {
-                // TODO: sanity check that the same variable isn't used twice
-                Self::Capture(attr.parse_args_with(Punctuated::parse_terminated)?)
+                if attr.tokens.is_empty() || eq_by_fmt(&attr.tokens, quote! { () }) {
+                    return Err(syn::Error::new_spanned(
+                        attr,
+                        "capture must contain at least one identifier \
+                        (e.g. `#[hitori::capture(this)]`)",
+                    ));
+                } else {
+                    Self::Capture(attr.parse_args_with(Punctuated::parse_terminated)?)
+                }
             } else if hitori_attr_ident_eq_str(attr, "repeat") {
-                Self::Repeat(attr.parse_args()?)
+                if attr.tokens.is_empty() || eq_by_fmt(&attr.tokens, quote! { () }) {
+                    return Err(syn::Error::new_spanned(
+                        attr,
+                        "repeat must contain at least one bound \
+                        (e.g. `#[hitori::repeat(ge = 0)]`)",
+                    ));
+                } else {
+                    Self::Repeat(attr.parse_args()?)
+                }
             } else if hitori_attr_ident_eq_str(attr, "position") {
                 Self::Position(attr.parse_args()?)
             } else {
@@ -161,7 +176,6 @@ impl HitoriAttribute {
 }
 
 enum Group<'a> {
-    Paren(&'a Expr),
     All(&'a Punctuated<Expr, Token![,]>),
     Any(&'a Punctuated<Expr, Token![,]>),
 }
@@ -183,10 +197,12 @@ impl<'a> TryFrom<&'a Expr> for Tree<'a> {
             Expr::Array(arr) => {
                 Tree::Group(Group::Any(&arr.elems), HitoriAttribute::find(&arr.attrs)?)
             }
-            Expr::Paren(paren) => Tree::Group(
-                Group::Paren(&paren.expr),
-                HitoriAttribute::find(&paren.attrs)?,
-            ),
+            Expr::Paren(paren) => {
+                return Err(syn::Error::new_spanned(
+                    paren,
+                    "add a trailing comma inside of the parenthesis",
+                ));
+            }
             _ => Tree::Test(expr),
         })
     }

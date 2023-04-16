@@ -59,7 +59,7 @@ fn some_hi_test(
             return true;
         }
         #vars_cache
-        for _ in lo..(hi - 1) {
+        for _ in lo + 2..hi {
             if self.#inner_matches_ident() {
                 #vars_update
             } else {

@@ -118,7 +118,6 @@ impl State {
 
     fn push_group(&mut self, group: Group) -> syn::Result<BTreeSet<Ident>> {
         match group {
-            Group::Paren(paren) => self.push_tree(paren.try_into()?),
             Group::All(all) => self.push_group_all(all),
             Group::Any(any) => self.push_group_any(any),
         }

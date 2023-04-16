@@ -32,7 +32,7 @@ core::compile_error!(
 #[cfg(feature = "box")]
 extern crate alloc;
 
-#[cfg(all(doc, feature = "box", feature = "macros", not(feature = "find_hitori")))]
+#[cfg(all(feature = "box", feature = "macros", not(feature = "find_hitori")))]
 #[cfg_attr(doc, doc(cfg(doc)))]
 pub mod examples;
 pub mod string;
@@ -40,8 +40,8 @@ pub mod string;
 mod expr;
 mod generic;
 
-pub use expr::{Expr, ExprMut};
-pub use generic::{find, matches};
+pub use expr::{Expr, ExprMut, Matched};
+pub use generic::{find, matches, Found};
 
 /// Implements `Expr` and optionally `ExprMut` for the struct.
 ///
