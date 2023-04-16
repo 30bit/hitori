@@ -1,8 +1,8 @@
 use crate as hitori;
-pub struct Float;
+pub struct FloatType;
 
 #[hitori::impl_expr]
-impl Expr<usize, char> for Float {
+impl Expr<usize, char> for FloatType {
     const PATTERN: _ = (
         |ch| ch == 'f',
         [
