@@ -110,12 +110,12 @@
 #![doc = include_example!("rectangle")]
 //!
 //! let s = "◾ 9";
-//! let matched = hitori::string::matches(Fraction, s).unwrap();
+//! let matched = hitori::string::matches(Rectangle, s).unwrap();
 //! assert_eq!(&s[matched.capture.width.unwrap()], "9");
 //! assert_eq!(&s[matched.capture.height.unwrap()], "9");
 //!
 //! let s = "▬ 5 6";
-//! let matched = hitori::string::matches(Fraction, s).unwrap();
+//! let matched = hitori::string::matches(Rectangle, s).unwrap();
 //! assert_eq!(&s[matched.capture.width.unwrap()], "5");
 //! assert_eq!(&s[matched.capture.height.unwrap()], "6");
 //! ```
@@ -197,6 +197,50 @@
 //! `^(?P<last_car>(?P<first_car>🚃))$|^(?P<first_car1>🚃)🚃{3}(?P<last_car1>🚃)$`
 //!  in [regex] syntax*
 //!
+//! # Putting everything together
+//!
+//! ### Email
+//!
+//! ```
+#![doc = include_example!("email")]
+//!
+//! let s = "user@example.com";
+//! let matched = hitori::string::matches(Email, s).unwrap();
+//! assert_eq!(&s[matched.capture.user.unwrap()], "user");
+//! assert_eq!(&s[matched.capture.domain_with_extension.unwrap()], "example.com");
+//! //assert_eq!(&s[matched.capture.domain_extension.unwrap()], "com");
+//! ```
+//! *equivalent to `[\w\.+-]+@[\w\.-]+\.[\w\.-]+` in [regex] syntax*
+//!
+//! ### Uri
+//!
+//! ```
+#![doc = include_example!("uri")]
+//!
+//! let s = "postgres://user@localhost:5432/my_db";
+//! let matched = hitori::string::matches(Uri, s).unwrap();
+//! assert_eq!(&s[matched.capture.schema.unwrap()], "postgres");
+//! assert_eq!(&s[matched.capture.path.unwrap()], "user@localhost:5432/my_db");
+//! assert!(matched.capture.query.is_none());
+//! assert!(matched.capture.fragment.is_none());
+//! ```
+//! *equivalent to `[\w]+://[^/\s?#][^\s?#]+(?:\?[^\s#]*)?(?:#[^\s]*)?`
+//! in [regex] syntax*
+//!
+//! ### IpV4
+//!
+//! ```
+#![doc = include_example!("ipv4")]
+//! 
+//! assert!(hitori::string::matches(IpV4, "255.240.111.255").is_some());
+//! assert!(hitori::string::matches(IpV4, "66.249.64.13").is_some());
+//! assert!(hitori::string::matches(IpV4, "216.58.214.14").is_some());
+//! assert!(hitori::string::matches(IpV4, "255.256.111.255").is_none());
+//! ```
+//! *equivalent to
+//! `(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9])`
+//! in [regex] syntax*
+//!
 //! [`impl_expr`]: crate::impl_expr
 //! [`impl_expr_mut`]: crate::impl_expr
 //! [hitori]: https://docs.rs/hitori
@@ -206,27 +250,33 @@
 
 mod bad_password;
 mod binary_u32;
+mod email;
 mod false_;
 mod float_type;
 mod fraction;
 mod hello;
 mod identifier;
+mod ipv4;
 mod rectangle;
 mod shopping_list;
 mod train_cars;
 mod true_;
+mod uri;
 mod would_you_kindly;
 
-pub use bad_password::{BadPasswordCapture, BadPassword};
+pub use bad_password::{BadPassword, BadPasswordCapture};
 pub use binary_u32::{BinaryU32, BinaryU32Capture};
+pub use email::{Email, EmailCapture};
 pub use false_::{False, FalseCapture};
 pub use float_type::{FloatType, FloatTypeCapture};
 pub use fraction::{Fraction, FractionCapture};
 pub use identifier::{Identifier, IdentifierCapture};
+pub use ipv4::{IpV4, IpV4Capture};
 pub use rectangle::{Rectangle, RectangleCapture};
 pub use shopping_list::{ShoppingList, ShoppingListCapture};
 pub use train_cars::{TrainCars, TrainCarsCapture};
 pub use true_::{True, TrueCapture};
+pub use uri::{Uri, UriCapture};
 pub use would_you_kindly::{WouldYouKindly, WouldYouKindlyCapture};
 
 macro_rules! include_example {

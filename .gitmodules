@@ -1,0 +1,3 @@
+[submodule "hitori/benches/regex-benchmark"]
+	path = hitori/benches/regex-benchmark
+	url = https://github.com/mariomka/regex-benchmark.git

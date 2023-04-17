@@ -97,9 +97,9 @@ impl Vars {
         let is_first = &self.is_first;
         let end = &self.end;
         quote! {
-            self.__iter = ::core::clone::Clone::clone(#iter);
+            self.__iter = ::core::clone::Clone::clone(&#iter);
             self.__is_first = #is_first;
-            self.__end = ::core::clone::Clone::clone(#end);
+            self.__end = ::core::clone::Clone::clone(&#end);
         }
     }
 }

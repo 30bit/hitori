@@ -52,7 +52,7 @@ pub struct MatchesIter<'a, E> {
 }
 
 impl<'a, E> MatchesIter<'a, E> {
-    pub fn new<I>(expr: E, s: &'a str) -> Self {
+    pub fn new(expr: E, s: &'a str) -> Self {
         Self {
             expr,
             start: 0,
@@ -95,7 +95,7 @@ pub struct FindIter<'a, E> {
 }
 
 impl<'a, E> FindIter<'a, E> {
-    pub fn new<I>(expr: E, s: &'a str) -> Self {
+    pub fn new(expr: E, s: &'a str) -> Self {
         Self {
             expr,
             start: 0,
