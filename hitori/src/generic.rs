@@ -44,14 +44,14 @@ pub struct Found<Idx, C, I> {
     /// characters is skipped)
     pub iter_remainder: I,
     /// Was the `iter` advanced before the match (e.g.
-    /// `is_first` [`matches`] argument was `false`) or during the match
+    /// `is_first` [`find`] argument was `false`) or during the match
     /// (e.g. there was an [`Iterator::next`] call)
     pub is_iter_advanced: bool,
 }
 
 /// Finds the first subsequence of characters that is matched by [`ExprMut`].
 ///
-/// *See [`matches`] for arguments description*
+/// *See [`matches()`] for arguments description*
 pub fn find<E, Idx, Ch, I>(
     mut expr: E,
     mut start: Idx,
