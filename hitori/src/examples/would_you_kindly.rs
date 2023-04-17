@@ -1,7 +1,7 @@
 use crate as hitori;
 const PHRASE: &str = "Would you kindly ";
 
-/// A captured request that is prefixed with `Would you kindly` and suffixed with a `?`
+/// A captured request that is prefixed with `Would you kindly` and suffixed with a `?` or '!'
 pub struct WouldYouKindly {
     phrase_chars: core::str::Chars<'static>,
 }
@@ -22,8 +22,8 @@ impl ExprMut<usize, char> for WouldYouKindly {
         #[hitori::capture(request)]
         (
             #[hitori::repeat(ge = 1)]
-            (|ch| ch != '?',),
+            (|ch| ch != '?' && ch != '!',),
         ),
-        |ch| ch == '?',
+        |ch| ch == '?' || ch == '!',
     );
 }

@@ -244,7 +244,7 @@ impl<'a> Input<'a> {
             self.where_clause,
         );
         let impl_wrapper_block = st.impl_wrapper_block;
-        let last_subexpr_matches_ident = st.prev_subexpr_matches_ident.unwrap();
+        let total_matches_ident = st.prev_subexpr_matches_ident.unwrap();
         let wrapper_ident = self.wrapper_ident;
         let tokens = quote! {
             #partial_impl_wrapper {
@@ -258,12 +258,12 @@ impl<'a> Input<'a> {
                 __iter: ::core::iter::IntoIterator::into_iter(iter),
                 __phantom: ::core::marker::PhantomData,
             };
-            if wrapper.#last_subexpr_matches_ident() {
+            if wrapper.#total_matches_ident() {
                 ::core::option::Option::Some(#hitori_ident::Matched {
                     end: wrapper.__end,
                     capture: wrapper.__capture,
                     iter_remainder: wrapper.__iter,
-                    advanced_iter: !wrapper.__is_first,
+                    is_iter_advanced: !wrapper.__is_first,
                 })
             } else {
                 ::core::option::Option::None

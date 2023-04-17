@@ -21,7 +21,7 @@ impl State {
         self.next_subexpr_index += 1;
     }
 
-    fn unwrap_prev_subexpr_matches_ident(&self) -> &Ident {
+    pub fn unwrap_prev_subexpr_matches_ident(&self) -> &Ident {
         self.prev_subexpr_matches_ident.as_ref().unwrap()
     }
 

@@ -26,7 +26,5 @@ examples = []
 [dependencies]
 hitori-macros = { version = "=0.1.5", path = "../hitori-macros", optional = true }
 
-libc-print = "0.1.21"
-
 [dev-dependencies]
 regex = "1.7.3"

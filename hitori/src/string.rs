@@ -2,8 +2,12 @@ use crate::{
     expr::{ExprMut, Matched},
     generic::{self, Found},
 };
-use core::{mem, str::CharIndices};
+use core::{iter::FusedIterator, mem, str::CharIndices};
 
+/// Like [`CharIndices`], but tuples contain [`char`] ends
+/// instead of [`char`] starts
+///
+/// [`CharIndices`]: core::str::CharIndices
 #[derive(Clone, Debug)]
 pub struct CharEnds<'a> {
     next: char,
@@ -11,14 +15,21 @@ pub struct CharEnds<'a> {
     len: usize,
 }
 
-impl<'a> From<&'a str> for CharEnds<'a> {
-    fn from(s: &'a str) -> Self {
+impl<'a> CharEnds<'a> {
+    pub fn new(s: &'a str) -> Self {
         let mut indices = s.char_indices();
         let (next, len) = match indices.next() {
             Some((_, next)) => (next, s.len()),
             None => (char::default(), 0),
         };
         Self { next, indices, len }
+    }
+}
+
+impl<'a> From<&'a str> for CharEnds<'a> {
+    #[inline]
+    fn from(s: &'a str) -> Self {
+        Self::new(s)
     }
 }
 
@@ -36,6 +47,9 @@ impl<'a> Iterator for CharEnds<'a> {
     }
 }
 
+impl<'a> FusedIterator for CharEnds<'a> {}
+
+/// Checks if a [`str`] starts with [`ExprMut`]-matched characters
 #[inline]
 pub fn matches<E>(expr: E, s: &str) -> Option<Matched<usize, E::Capture, CharEnds>>
 where
@@ -44,15 +58,17 @@ where
     generic::matches(expr, 0, true, CharEnds::from(s))
 }
 
+/// An iterator of successive non-overlapping [`matches`](crate::string::matches)
+/// that start where previous [`Matched`] ends
 #[derive(Clone, Debug)]
 pub struct MatchesIter<'a, E> {
-    pub expr: E,
-    pub start: usize,
-    pub iter: CharEnds<'a>,
+    expr: E,
+    start: usize,
+    iter: CharEnds<'a>,
 }
 
 impl<'a, E> MatchesIter<'a, E> {
-    pub fn new(expr: E, s: &'a str) -> Self {
+    pub fn new<I>(expr: E, s: &'a str) -> Self {
         Self {
             expr,
             start: 0,
@@ -80,6 +96,7 @@ where
     }
 }
 
+/// Finds the first substring that is matched by an [`ExprMut`]
 pub fn find<E>(expr: E, s: &str) -> Option<Found<usize, E::Capture, CharEnds>>
 where
     E: ExprMut<usize, char>,
@@ -87,15 +104,16 @@ where
     generic::find(expr, 0, true, CharEnds::from(s))
 }
 
+/// Iterator of successive non-overlapping [`find`]s
 #[derive(Clone, Debug)]
 pub struct FindIter<'a, E> {
-    pub expr: E,
-    pub start: usize,
-    pub iter: CharEnds<'a>,
+    expr: E,
+    start: usize,
+    iter: CharEnds<'a>,
 }
 
 impl<'a, E> FindIter<'a, E> {
-    pub fn new(expr: E, s: &'a str) -> Self {
+    pub fn new<I>(expr: E, s: &'a str) -> Self {
         Self {
             expr,
             start: 0,

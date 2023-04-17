@@ -1,13 +1,7 @@
-//! Hitori is a generic regular expressions library. It works by creating series of
-//! if-statements for each expression at compile-time. Capturing is done through the traits.
-//!
-//! # Example
-//!
-//! ```
-//! // TODO
-//! ```
+//! Hitori is a generic partially regular expressions library. It works by creating series of
+//! if-statements for each expression at compile-time. Capturing is done through structs.
 //!  
-//! *See more code samples along with impls and structs they expand to in [`examples`].*
+//! *See code samples along with impls and structs they expand to in [`examples`].*
 //!
 //! # Crate features
 //!
@@ -16,6 +10,7 @@
 //! - **`macros`** *(enabled by default)* – `impl_expr_mut` and `impl_expr` macros.
 //! - **`find-hitori`** – finds hitori package to be used in macros
 //!   even if it has been renamed in Cargo.toml. **`macros`** feature is required.
+//! - **`examples`** – includes examples module into the build
 
 #![no_std]
 #![cfg_attr(
@@ -33,13 +28,16 @@ core::compile_error!(
 extern crate alloc;
 
 #[cfg(all(
-    any(feature = "examples", doc),
+    feature = "examples",
     feature = "box",
     feature = "macros",
     not(feature = "find_hitori")
 ))]
-#[cfg_attr(doc, doc(cfg(doc)))]
+#[cfg_attr(doc, doc(cfg(feature = "examples")))]
 pub mod examples;
+/// Items specific to [`ExprMut<usize, char>`]
+/// 
+/// [`Expr<usize, char>`]: crate::ExprMut
 pub mod string;
 
 mod expr;
@@ -48,25 +46,24 @@ mod generic;
 pub use expr::{Expr, ExprMut, Matched};
 pub use generic::{find, matches, Found};
 
-/// Implements `Expr` and optionally `ExprMut` for the struct.
+/// Implements [`Expr`] and [`ExprMut`] for the type.
 ///
 /// *See [`examples`] for code samples along with impls and structs they expand to.*
 ///
 /// # Arguments
 ///
-/// - **`with_capture`** – sets the name of `Self::Capture` struct
-/// - **`with_capture_vis`** – sets visibility of `Self::Capture` struct
+/// - **`with_capture`** – sets the name of [`ExprMut::Capture`] struct.
+/// - **`with_capture_vis`** – sets visibility of [`ExprMut::Capture`] struct.
+/// 
+/// [`ExprMut::Capture`]: crate::expr::ExprMut::Capture
 #[cfg(feature = "macros")]
 #[cfg_attr(doc, doc(cfg(feature = "macros")))]
 pub use hitori_macros::impl_expr;
 
-/// Implements `ExprMut` for the struct.
+/// Implements [`ExprMut`] for the type.
 ///
 /// *See [`examples`] for code samples along with impls and structs they expand to.*
-///
-/// # Arguments
-///
-/// *Same as [`impl_expr`]*
+/// *See [`impl_expr`] for arguments description.*
 #[cfg(feature = "macros")]
 #[cfg_attr(doc, doc(cfg(feature = "macros")))]
 pub use hitori_macros::impl_expr_mut;

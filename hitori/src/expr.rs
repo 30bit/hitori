@@ -1,14 +1,29 @@
+/// Returned by [`ExprMut::matches_mut`], [`matches`] and [`string::matches`] functions,
+/// and as items of [`string::MatchesIter`]
+///
+/// [`matches`]: crate::generic::matches
+/// [`string::matches`]: crate::string::matches
+/// [`string::MatchesIter`]: crate::string::MatchesIter
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct Matched<Idx, C, I> {
+    /// An exclusive end of matched subsequence of characters
     pub end: Idx,
+    /// Captured ranges
     pub capture: C,
+    /// The rest of the `iter` argument (i.e. matched subsequence of
+    /// characters is skipped)
     pub iter_remainder: I,
-    pub advanced_iter: bool,
+    /// Was the `iter` advanced before the match (e.g.
+    /// `is_first` [`matches`] argument was `false`) or during the match
+    /// (e.g. there was an [`Iterator::next`] call)
+    pub is_iter_advanced: bool,
 }
 
+/// Partially-regular expression with a mutable state
 pub trait ExprMut<Idx, Ch> {
     type Capture;
 
+    /// *See [`matches`](crate::generic::matches)*
     fn matches_mut<I>(
         &mut self,
         start: Idx,
@@ -20,7 +35,9 @@ pub trait ExprMut<Idx, Ch> {
         I::IntoIter: Clone;
 }
 
+/// Partially-regular expression with an immutable state
 pub trait Expr<Idx, Ch>: ExprMut<Idx, Ch> {
+    /// *See [`matches`](crate::generic::matches)*
     fn matches<I>(
         &self,
         start: Idx,

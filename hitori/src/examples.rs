@@ -172,7 +172,7 @@
 //! let matched = hitori::string::matches(WouldYouKindly::default(), s).unwrap();
 //! assert_eq!(&s[matched.capture.request.unwrap()], "lower that weapon for a moment");
 //!```
-//! *equivalent to `Would you kindly (?P<request>[^?]+)\?` in [regex] syntax*
+//! *equivalent to `Would you kindly (?P<request>[^?!]+)[?!]` in [regex] syntax*
 //!
 //! # Positions
 //!
