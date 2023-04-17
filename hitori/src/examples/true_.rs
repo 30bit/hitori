@@ -1,4 +1,5 @@
 use crate as hitori;
+/// An empty all-pattern
 pub struct True;
 
 #[hitori::impl_expr]

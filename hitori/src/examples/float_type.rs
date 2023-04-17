@@ -1,4 +1,5 @@
 use crate as hitori;
+/// `f32` or `f64`
 pub struct FloatType;
 
 #[hitori::impl_expr]

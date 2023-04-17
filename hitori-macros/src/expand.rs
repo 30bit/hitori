@@ -65,7 +65,7 @@ fn capture<'a>(
         (
             quote! {( ::core::marker::PhantomData<#idx_ident> );},
             quote! {( ::core::marker::PhantomData )},
-            Some(quote! { #[doc = "This is an empty struct"] }),
+            Some(quote! { #[doc = "This is an empty placeholder-struct"] }),
         )
     } else {
         (

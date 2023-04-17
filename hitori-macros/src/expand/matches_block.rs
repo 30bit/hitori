@@ -94,7 +94,7 @@ fn partial_impl_wrapper(
             for #wrapper_ident<#no_bounds_wrapper_params>
             #where_clause
             {
-                fn deref_mut(&mut self) -> &Self::Target {
+                fn deref_mut(&mut self) -> &mut Self::Target {
                     self.__target
                 }
             }

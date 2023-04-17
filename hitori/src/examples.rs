@@ -8,6 +8,9 @@
 //!
 //! ```
 #![doc = include_example!("hello")]
+//!
+//! assert!(hitori::string::matches(Hello, "hello").is_some());
+//! assert!(hitori::string::matches(Hello, "world").is_none());
 //! ```
 //! *equivalent to `hello` in [regex] syntax*
 //!
@@ -19,9 +22,12 @@
 //! is **not** optional.
 //!
 //! ```
-#![doc = include_example!("aaaaa")]
+#![doc = include_example!("bad_password")]
+//!
+//! assert!(hitori::string::matches(BadPassword, "12345").is_some());
+//! assert!(hitori::string::matches(BadPassword, "cUFK^06#43Gs").is_none());
 //! ```
-//! *equivalent to `a{5}` in [regex] syntax*
+//! *equivalent to `\d{1, 8}` in [regex] syntax*
 //!
 //! ### Empty all-pattern
 //!
@@ -29,6 +35,10 @@
 //!
 //! ```
 #![doc = include_example!("true_")]
+//!
+//! for s in ["Hello, world!", "34", "hitori"] {
+//!     assert!(hitori::string::matches(True, s).is_some());
+//! }
 //! ```
 //!
 //! # Any-pattens
@@ -38,6 +48,9 @@
 //!
 //! ```
 #![doc = include_example!("float_type")]
+//!
+//! assert!(hitori::string::matches(FloatType, "f64").is_some());
+//! assert!(hitori::string::matches(FloatType, "f128").is_none());
 //! ```
 //! *equivalent to `f(32|64)` in [regex] syntax*
 //!
@@ -47,6 +60,10 @@
 //!
 //! ```
 #![doc = include_example!("false_")]
+//!
+//! for s in ["Hello, world!", "34", "hitori"] {
+//!     assert!(hitori::string::matches(False, s).is_none());
+//! }
 //! ```
 //!
 //! # Capturing
@@ -59,6 +76,13 @@
 //!
 //! ```
 #![doc = include_example!("fraction")]
+//!
+//! let s = "4/5";
+//! let matched = hitori::string::matches(Fraction, s).unwrap();
+//! assert_eq!(&s[matched.capture.numerator.unwrap()], "4");
+//! assert_eq!(&s[matched.capture.denominator.unwrap()], "5");
+//!
+//! assert!(hitori::string::matches(Fraction, "1/0").is_none());
 //! ```
 //! *equivalent to `(?P<numerator>\d)/(?P<denominator>[1-9])` in [regex] syntax*
 //!
@@ -69,6 +93,10 @@
 //!
 //! ```
 #![doc = include_example!("shopping_list")]
+//!
+//! let s = "🍄🧀";
+//! let matched = hitori::string::matches(ShoppingList, s).unwrap();
+//! assert_eq!(&s[matched.capture.last_item.unwrap()], "🧀");
 //! ```
 //! *equivalent to `(?P<last_item>🍄)?(?P<last_item>🫑)?(?P<last_item>🧀)?(?P<last_item>🥚)?`
 //! in [regex] syntax*
@@ -80,6 +108,16 @@
 //!
 //! ```
 #![doc = include_example!("rectangle")]
+//!
+//! let s = "◾ 9";
+//! let matched = hitori::string::matches(Fraction, s).unwrap();
+//! assert_eq!(&s[matched.capture.width.unwrap()], "9");
+//! assert_eq!(&s[matched.capture.height.unwrap()], "9");
+//!
+//! let s = "▬ 5 6";
+//! let matched = hitori::string::matches(Fraction, s).unwrap();
+//! assert_eq!(&s[matched.capture.width.unwrap()], "5");
+//! assert_eq!(&s[matched.capture.height.unwrap()], "6");
 //! ```
 //! *equivalent to `◾ (?P<width>(?P<height>\d))|▬ (?P<width>\d) (?P<height>\d)`
 //! in [regex] syntax*
@@ -95,30 +133,69 @@
 //! - **`gt = x`** – greater than `x` times.
 //! - **`ge = x`** – greater or equal to `x` times.
 //!
-//! Value assigned to any bound must be either literal
-//! [`usize`] (like `lt = 410` or `gt = 20usize`)
+//! Value assigned to the bound must be either literal
+//! [`usize`] (like `lt = 410` or `ge = 20usize`)
 //! or literal string containing an expression that evaluates to
 //! [`usize`] (like `eq = "self.name.len()"`).
 //!
 //! ```
 #![doc = include_example!("identifier")]
-//! ```
 //!
-//! # Combining bounds
+//! for s in ["_", "x1", "my_var32"] {
+//!     assert!(hitori::string::matches(Identifier, s).is_some());
+//! }
+//! ```
+//! *equivalent to `[[:alpha:]_]\w*` in [regex] syntax*
+//!
+//! ### Combining bounds
 //!
 //! Lower bounds (`gt` and `ge`) can be combined with upper bounds  (`lt` and `le`).
 //! Default lower bound is `ge = 0`, while an upper bound is unbounded by default.
 //!
 //! ```
 #![doc = include_example!("binary_u32")]
+//!
+//! assert!(hitori::string::matches(BinaryU32, "0b110011010").is_some());
 //! ```
+//! *equivalent to `0b[01]{1,32}` in [regex] syntax*
 //!
-//! # Expression bounds
+//! ### Expression bounds
 //!
-//! Expression bounds can be used repeat `x` times, where `x` is not a literal int
-//! (e.g. as constant names or [`ExprMut`] implementor's fields).
+//! Expression bounds can be used when the number of times to repeat
+//! is not a literal [`usize`] (e.g. constants, function outputs
+//! and [`ExprMut`] implementor's fields and methods).
 //!
+//! ```
 #![doc = include_example!("would_you_kindly")]
+//!
+//! let s = "Would you kindly lower that weapon for a moment?";
+//! let matched = hitori::string::matches(WouldYouKindly::default(), s).unwrap();
+//! assert_eq!(&s[matched.capture.request.unwrap()], "lower that weapon for a moment");
+//!```
+//! *equivalent to `Would you kindly (?P<request>[^?]+)\?` in [regex] syntax*
+//!
+//! # Positions
+//!
+//! Annotating an all-pattern or an any-pattern with `#[hitori::position]` adds
+//! a check of relative to an input position of a matched subpattern. There are 2
+//! possible arguments:
+//!
+//! - **`first`** – subpattern matched from the beginning of an input
+//! - **`last`** – subpattern matched to the end of an input
+//!
+//! ```
+#![doc = include_example!("train_cars")]
+//!
+//! assert!(hitori::string::matches(TrainCars, "🚃").is_some());
+//! assert!(hitori::string::matches(TrainCars, "🚃🚃🚃🚃🚃").is_some());
+//! assert!(hitori::string::matches(TrainCars, " 🚃").is_none());
+//! assert!(hitori::string::matches(TrainCars, "🚃 ").is_none());
+//! assert!(hitori::string::matches(TrainCars, "🚃🚃🚃🚃🚃 ").is_none());
+//! assert!(hitori::string::matches(TrainCars, " 🚃🚃🚃🚃🚃").is_none());
+//! ```
+//! *equivalent to
+//! `^(?P<last_car>(?P<first_car>🚃))$|^(?P<first_car1>🚃)🚃{3}(?P<last_car1>🚃)$`
+//!  in [regex] syntax*
 //!
 //! [`impl_expr`]: crate::impl_expr
 //! [`impl_expr_mut`]: crate::impl_expr
@@ -127,7 +204,7 @@
 //! [`ExprMut::Capture`]: crate::ExprMut::Capture
 //![`ExprMut`]: crate::ExprMut
 
-mod aaaaa;
+mod bad_password;
 mod binary_u32;
 mod false_;
 mod float_type;
@@ -136,8 +213,21 @@ mod hello;
 mod identifier;
 mod rectangle;
 mod shopping_list;
+mod train_cars;
 mod true_;
 mod would_you_kindly;
+
+pub use bad_password::{BadPasswordCapture, BadPassword};
+pub use binary_u32::{BinaryU32, BinaryU32Capture};
+pub use false_::{False, FalseCapture};
+pub use float_type::{FloatType, FloatTypeCapture};
+pub use fraction::{Fraction, FractionCapture};
+pub use identifier::{Identifier, IdentifierCapture};
+pub use rectangle::{Rectangle, RectangleCapture};
+pub use shopping_list::{ShoppingList, ShoppingListCapture};
+pub use train_cars::{TrainCars, TrainCarsCapture};
+pub use true_::{True, TrueCapture};
+pub use would_you_kindly::{WouldYouKindly, WouldYouKindlyCapture};
 
 macro_rules! include_example {
     ($name:literal) => {

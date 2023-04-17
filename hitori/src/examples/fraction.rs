@@ -1,4 +1,5 @@
 use crate as hitori;
+/// Single-digit numerator and denominator
 pub struct Fraction;
 
 #[hitori::impl_expr]

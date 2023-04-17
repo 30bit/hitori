@@ -1,7 +1,7 @@
 use {crate as hitori, core::str::Chars};
-
 const PHRASE: &str = "Would you kindly ";
 
+/// A captured request that is prefixed with `Would you kindly` and suffixed with a `?`
 pub struct WouldYouKindly {
     phrase_chars: Chars<'static>,
 }

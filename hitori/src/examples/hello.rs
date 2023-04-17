@@ -1,4 +1,5 @@
 use crate as hitori;
+/// "hello"
 pub struct Hello;
 
 #[hitori::impl_expr]

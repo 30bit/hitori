@@ -1,4 +1,5 @@
 use crate as hitori;
+/// Rust identifier such as `my_var32`
 pub struct Identifier;
 
 #[hitori::impl_expr]

@@ -1,4 +1,5 @@
 use crate as hitori;
+/// Either a square with a side length, or a rectangle with width and height
 pub struct Rectangle;
 
 #[hitori::impl_expr]
