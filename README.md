@@ -14,8 +14,6 @@ For example, using [regex] one can rewrite `a+` as `a*a` and it would still  mat
 sequence of `a`s longer than zero. With [hitori], however, `a*` would consume
 all the `a`s, and the expression won't match. 
 
-Most of the times, expression can be altered to mitigate [hitori] limitations. 
-
 Step-by step pattern matching also leads to diminished performance when matching
 large texts and an expression contains repetitions of frequent characters.
 
