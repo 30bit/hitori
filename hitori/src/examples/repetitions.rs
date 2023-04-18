@@ -1,6 +1,6 @@
 //! Repetition is done by annotating an all-pattern or an any-pattern with
-//! `#[hitori::repeat]`. 
-//! 
+//! `#[hitori::repeat]`.
+//!
 //! There are 5 possible name-value arguments:
 //!
 //! - **`eq = x`** – exactly `x` times

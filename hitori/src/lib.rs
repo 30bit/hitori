@@ -1,25 +1,25 @@
-//! Hitori is a generic partially-regular expressions library. 
-//! It works by creating series of if-statements for each expression at compile-time. 
+//! Hitori is a generic partially-regular expressions library.
+//! It works by creating series of if-statements for each expression at compile-time.
 //! Capturing is done through structs.
 //!  
 //! *See code samples along with the traits, impls and structs they expand to in [`examples`].*
-//! 
+//!
 //! # Limitations
-//! 
-//! Pattern matching is step-by-step. It is impossible to to detach last element of a repetition. 
-//! For example, using [regex] one can rewrite `a+` as `a*a` and it would still  match any 
+//!
+//! Pattern matching is step-by-step. It is impossible to to detach last element of a repetition.
+//! For example, using [regex] one can rewrite `a+` as `a*a` and it would still  match any
 //! sequence of `a`s longer than zero. With [hitori], however, `a*` would consume
-//! all the `a`s, and the expression won't match. 
-//! 
+//! all the `a`s, and the expression won't match.
+//!
 //! Step-by step pattern matching also leads to diminished performance when matching
 //! large texts with an expression that contains repetitions of characters frequent in the text.
-//! 
+//!
 //! # Crate features
-//! 
-//! - **`alloc`** *(enabled by default)* – string replace functions and blanket implementations 
+//!
+//! - **`alloc`** *(enabled by default)* – string replace functions and blanket implementations
 //!   of [hitori] traits for boxes using alloc crate.
 //! - **`macros`** *(enabled by default)* – [`impl_expr_mut`] and [`impl_expr`] macros.
-//! - **`find-hitori`** – finds hitori package to be used in macros 
+//! - **`find-hitori`** – finds hitori package to be used in macros
 //!   even if it has been renamed in Cargo.toml. **`macros`** feature is required.
 //! - **`examples`** – includes [`examples`] module into the build.
 //!

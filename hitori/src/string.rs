@@ -54,7 +54,7 @@ impl<'a> FusedIterator for CharEnds<'a> {}
 
 /// Shorthand for [`CharEnds::new`]
 #[inline]
-pub fn char_ends<'a>(s: &'a str) -> CharEnds<'a> {
+pub fn char_ends(s: &str) -> CharEnds {
     CharEnds::new(s)
 }
 
@@ -107,7 +107,7 @@ where
 
 /// Shorthand for [`Repeat::new`]
 #[inline]
-pub fn repeat<'a, E>(expr: E, s: &'a str) -> Repeat<'a, E> {
+pub fn repeat<E>(expr: E, s: &str) -> Repeat<E> {
     Repeat::new(expr, s)
 }
 
@@ -159,7 +159,7 @@ where
 
 /// Shorthand for [`FindIter::new`]
 #[inline]
-pub fn find_iter<'a, E>(expr: E, s: &'a str) -> FindIter<'a, E> {
+pub fn find_iter<E>(expr: E, s: &str) -> FindIter<E> {
     FindIter::new(expr, s)
 }
 
@@ -185,7 +185,7 @@ where
 
 ///  Replaces every matched substring using `rep` closure
 ///
-/// First argument of the `rep` is the current [`String`] accumulator.
+/// First argument of `rep` is the current [`String`] accumulator.
 /// Second is the current [`Match`].
 ///
 /// Writing to the accumulator could be done using [`write!`].
