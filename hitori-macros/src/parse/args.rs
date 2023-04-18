@@ -48,7 +48,7 @@ impl TryFrom<Punctuated<Meta, Token![,]>> for Args {
                 _ => {
                     return Err(syn::Error::new_spanned(
                         arg,
-                        "expected `with_capture` or `with_capture_vis` with literal string value",
+                        "expected `with_capture` or `with_capture_vis` and literal string value",
                     ))
                 }
             }
