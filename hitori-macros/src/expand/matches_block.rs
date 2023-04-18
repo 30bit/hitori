@@ -26,7 +26,19 @@ fn partial_impl_wrapper(
     mut generic_params: Punctuated<GenericParam, Token![,]>,
     where_clause: Option<&WhereClause>,
 ) -> TokenStream {
-    let wrapper_params = quote! { 'a, #iter_ident, #generic_params };
+    fn wrapper_params(
+        generic_params: &Punctuated<GenericParam, syn::token::Comma>,
+        iter_ident: &Ident,
+    ) -> TokenStream {
+        let mut output = quote! { '__self, #generic_params };
+        if !generic_params.empty_or_trailing() {
+            <Token![,]>::default().to_tokens(&mut output);
+        }
+        iter_ident.to_tokens(&mut output);
+        output
+    }
+
+    let maybe_bounds_wrapper_params = wrapper_params(&generic_params, iter_ident);
 
     let mut phantom_data_params = lifetimes_into_punctuated_unit_refs(
         generic_params
@@ -39,10 +51,10 @@ fn partial_impl_wrapper(
     );
 
     remove_generic_params_bounds(&mut generic_params);
-    let no_bounds_wrapper_params = quote! { 'a, #iter_ident, #generic_params };
+    let no_bounds_wrapper_params = wrapper_params(&generic_params, iter_ident);
 
     for pair in generic_params.pairs() {
-        if !matches!(pair.value(), GenericParam::Const(_)) {
+        if matches!(pair.value(), GenericParam::Type(_)) {
             pair.to_tokens(&mut phantom_data_params);
         }
     }
@@ -67,8 +79,8 @@ fn partial_impl_wrapper(
     let mut_ = is_mut.then_some(<Token![mut]>::default());
 
     let mut output = quote! {
-       struct #wrapper_ident<#wrapper_params> #where_clause {
-           __target: &'a #mut_ #self_ty,
+       struct #wrapper_ident<#maybe_bounds_wrapper_params> #where_clause {
+           __target: &'__self #mut_ #self_ty,
            __capture: #capture_ident<#idx_ty>,
            __end: #idx_ty,
            __is_first: bool,
@@ -76,7 +88,7 @@ fn partial_impl_wrapper(
            __phantom: ::core::marker::PhantomData<(#phantom_data_params)>,
        };
 
-       impl<#wrapper_params> ::core::ops::Deref
+       impl<#maybe_bounds_wrapper_params> ::core::ops::Deref
        for #wrapper_ident<#no_bounds_wrapper_params>
        #where_clause
        {
@@ -90,7 +102,7 @@ fn partial_impl_wrapper(
 
     if is_mut {
         output.extend(quote! {
-            impl<#wrapper_params> ::core::ops::DerefMut
+            impl<#maybe_bounds_wrapper_params> ::core::ops::DerefMut
             for #wrapper_ident<#no_bounds_wrapper_params>
             #where_clause
             {
@@ -102,7 +114,7 @@ fn partial_impl_wrapper(
     }
 
     output.extend(quote! {
-        impl<#wrapper_params> #wrapper_ident<#no_bounds_wrapper_params> #where_clause
+        impl<#maybe_bounds_wrapper_params> #wrapper_ident<#no_bounds_wrapper_params> #where_clause
     });
 
     output

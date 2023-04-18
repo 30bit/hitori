@@ -2,7 +2,7 @@ mod matches_block;
 
 use crate::{parse, utils::hitori_ident};
 use proc_macro2::{Ident, TokenStream};
-use quote::{format_ident, quote};
+use quote::{format_ident, quote, ToTokens};
 use std::collections::BTreeSet;
 use syn::{punctuated::Punctuated, GenericParam, Token, Type, Visibility, WhereClause};
 
@@ -82,6 +82,9 @@ fn capture<'a>(
             None,
         )
     };
+    let idx_bound = default_idx_ty
+        .map(|ty| quote! { #idx_ident = #ty })
+        .unwrap_or_else(|| idx_ident.to_token_stream());
     quote! {
         #doc
         #[derive(
@@ -90,7 +93,7 @@ fn capture<'a>(
             ::core::cmp::PartialEq,
             ::core::fmt::Debug,
         )]
-        #vis struct #ident<#idx_ident = #default_idx_ty> #members
+        #vis struct #ident<#idx_bound> #members
         impl<#idx_ident> ::core::default::Default for #ident<#idx_ident> {
             fn default() -> Self {
                 Self #default_block

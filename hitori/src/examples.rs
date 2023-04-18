@@ -197,6 +197,19 @@
 //! `^(?P<last_car>(?P<first_car>🚃))$|^(?P<first_car1>🚃)🚃{3}(?P<last_car1>🚃)$`
 //!  in [regex] syntax*
 //!
+//! # Generics
+//!
+//! [`ExprMut`] implementor type can be generic and implementation
+//! of the trait can be blanket.
+//!
+//! ```
+#![doc = include_example!("all_in")]
+//!
+//! let lang = AllIn(&['+', '-', '<', '>', '.', ',', '[', ']', '\t', '\n', '\r']);
+//! let prog = ">++++++++[<+++++++++>-]<.";
+//! assert!(hitori::string::matches(lang, prog).is_some())
+//! ```
+//!
 //! # Putting everything together
 //!
 //! ### Email
@@ -231,7 +244,7 @@
 //!
 //! ```
 #![doc = include_example!("ipv4")]
-//! 
+//!
 //! assert!(hitori::string::matches(IpV4, "255.240.111.255").is_some());
 //! assert!(hitori::string::matches(IpV4, "66.249.64.13").is_some());
 //! assert!(hitori::string::matches(IpV4, "216.58.214.14").is_some());
@@ -248,6 +261,7 @@
 //! [`ExprMut::Capture`]: crate::ExprMut::Capture
 //![`ExprMut`]: crate::ExprMut
 
+mod all_in;
 mod bad_password;
 mod binary_u32;
 mod email;
