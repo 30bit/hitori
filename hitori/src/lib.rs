@@ -1,59 +1,30 @@
-//! Hitori is a generic regular expressions library. It works by creating series of
-//! if-statements for each expression at compile-time. Capturing is done through the traits.
-//!
-//! # Example
-//!
-//! ```
-//! struct Let {
-//!     max: u32,
-//! }
-//!
-//! #[hitori::impl_expr(and_expr_mut)]
-//! #[hitori::and_define(capture_mut, capture_ranges)]
-//! impl<C: LetCaptureMut<Idx>, Idx: Clone> Expr<C, Idx, char> for Let {
-//!     const PATTERN: _ = (
-//!         |ch| ch == 'l',
-//!         |ch| ch == 'e',
-//!         |ch| ch == 't',
-//!         char::is_whitespace,
-//!         #[hitori::capture(var)]
-//!         (char::is_alphabetic),
-//!         char::is_whitespace,
-//!         |ch| ch == '=',
-//!         char::is_whitespace,
-//!         #[hitori::capture(val)]
-//!         (
-//!             |ch: char| ch.to_digit(10).map(|d| d < self.max).unwrap_or_default(),
-//!             |ch| ch == '.' || ch == ',',
-//!             |ch: char| ch.is_digit(10),
-//!         ),
-//!         |ch| ch == ';'
-//!     );
-//! }
-//!
-//! let text = "... let x = 5.1; ...";
-//!
-//! let mut capture = LetCaptureRanges::default();
-//! let found = hitori::string::find(Let { max: 6 }, &mut capture, text)
-//!     .unwrap()
-//!     .unwrap();
-//! assert_eq!(&text[found], "let x = 5.1;");
-//! assert_eq!(&text[capture.var.unwrap()], "x");
-//! assert_eq!(&text[capture.val.unwrap()], "5.1");
-//!
-//! let not_found = hitori::string::find_no_capture(Let { max: 4 }, text);
-//! assert_eq!(not_found, None);
-//! ```
+//! Hitori is a generic partially-regular expressions library.
+//! It works by creating series of if-statements for each expression at compile-time.
+//! Capturing is done through structs.
 //!  
-//! *See more code samples along with traits, impls and structs they expand to in [`examples`].*
+//! *See code samples along with the traits, impls and structs they expand to in [`examples`].*
+//!
+//! # Limitations
+//!
+//! Pattern matching is step-by-step. It is impossible to to detach last element of a repetition.
+//! For example, using [regex] one can rewrite `a+` as `a*a` and it would still  match any
+//! sequence of `a`s longer than zero. With [hitori], however, `a*` would consume
+//! all the `a`s, and the expression won't match.
+//!
+//! Step-by step pattern matching also leads to diminished performance when matching
+//! large texts with an expression that contains repetitions of characters frequent in the text.
 //!
 //! # Crate features
 //!
-//! - **`box`** *(enabled by default)* – blanket implementations of `hitori` traits
-//!   for boxes using alloc crate.
-//! - **`macros`** *(enabled by default)* – `impl_expr_mut` and `impl_expr` macros.
+//! - **`alloc`** *(enabled by default)* – string replace functions and blanket implementations
+//!   of [hitori] traits for boxes using alloc crate.
+//! - **`macros`** *(enabled by default)* – [`impl_expr_mut`] and [`impl_expr`] macros.
 //! - **`find-hitori`** – finds hitori package to be used in macros
 //!   even if it has been renamed in Cargo.toml. **`macros`** feature is required.
+//! - **`examples`** – includes [`examples`] module into the build.
+//!
+//! [hitori]: https://docs.rs/hitori
+//! [regex]: https://docs.rs/regex
 
 #![no_std]
 #![cfg_attr(
@@ -67,65 +38,43 @@ core::compile_error!(
     r#""find-hitori" feature doesn't do anything unless "macros" feature is enabled"#
 );
 
-#[cfg(feature = "box")]
+#[cfg(feature = "alloc")]
 extern crate alloc;
 
-#[cfg(all(doc, feature = "box", feature = "macros", not(feature = "find_hitori")))]
-#[cfg_attr(doc, doc(cfg(doc)))]
+#[cfg(all(
+    any(doc, feature = "examples"),
+    feature = "alloc",
+    feature = "macros",
+    not(feature = "find_hitori")
+))]
+#[cfg_attr(doc, doc(cfg(feature = "examples")))]
 pub mod examples;
 pub mod string;
 
-mod capture;
 mod expr;
 mod generic;
 
-pub use generic::{find, find_no_capture, matches, matches_no_capture};
+pub use expr::{Expr, ExprMut, Match};
+pub use generic::{find, starts_with};
 
-/// Implements `Expr` and optionally `ExprMut` for the struct.
+/// Implements [`Expr`] and [`ExprMut`] for the type.
 ///
-/// *See [`examples`] for code samples along with the traits, impls and structs they expand to.*
+/// *See [`examples`] for code samples along with impls and structs they expand to.*
 ///
 /// # Arguments
 ///
-/// - **`and_mut`** – adds an `ExprMut` impl
+/// - **`with_capture`** – sets the name of [`ExprMut::Capture`] struct.
+/// - **`with_capture_vis`** – sets visibility of [`ExprMut::Capture`] struct.
 ///
-/// # Additional definitions
-///
-/// An additional attribute `and_define` can be placed along with [`impl_expr`].
-/// It accepts arguments:
-///
-/// - **`capture_mut`** – defines a subtrait of [`CaptureMut`] with methods
-///   corresponding to identifiers passed to `hitori::capture` attributes.
-///   Unless **`with_prefix`** is used, the subtrait is named by prefixing
-///   expression struct's name to *CaptureMut*.
-/// - **`capture`** – defines a subtrait of [`Capture`] and the trait generated
-///   by **`capture_mut`** with methods corresponding to identifiers passed to
-///   `hitori::capture` attributes. Unless **`with_prefix`** is used,
-///   the subtrait is named by prefixing expression struct's name to *Capture*.
-/// - **`capture_ranges`** – defines a struct with fields of type `Option<Range<Idx>>`
-///   that implements the trait generated by **`capture_mut`** by storing captured ranges.
-///   Unless **`with_prefix`** is used, the subtrait is named by prefixing
-///   expression struct's name to *CaptureRanges*
-/// - **`with_prefix`** – sets prefix for all the generated items
-/// - **`with_vis`** – sets visibility for all the generated items
+/// [`ExprMut::Capture`]: crate::expr::ExprMut::Capture
 #[cfg(feature = "macros")]
 #[cfg_attr(doc, doc(cfg(feature = "macros")))]
 pub use hitori_macros::impl_expr;
 
-/// Implements `ExprMut` for the struct.
+/// Implements [`ExprMut`] for the type.
 ///
-/// *See [`examples`] for code samples along with the traits, impls and structs they expand to.*
-///
-/// # Arguments
-///
-/// None
-///
-/// # Additional definitions
-///
-/// Same as [`impl_expr`]
+/// *See [`examples`] for code samples along with impls and structs they expand to.*
+/// *See [`impl_expr`] for arguments description.*
 #[cfg(feature = "macros")]
 #[cfg_attr(doc, doc(cfg(feature = "macros")))]
 pub use hitori_macros::impl_expr_mut;
-
-pub use capture::{Capture, CaptureMut};
-pub use expr::{Expr, ExprMut};

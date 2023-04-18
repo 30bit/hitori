@@ -1,81 +1,58 @@
-use crate::{CaptureMut, ExprMut};
-use core::ops::{Range, RangeTo};
+use crate::expr::{ExprMut, Match};
 
-/// The indices `iter` produces must be `Ch` ends.
-/// This is unlike [`CharIndices`] that iterates over `char` starts.
+/// Checks if an [`Iterator`] starts with [`ExprMut`]-matched characters.
+///
+/// # Arguments
+///
+/// - **`start`** – this should be the start of the first character in the `iter`.
+/// - **`is_first`** – tells `expr` whether it is a start of an input.
+/// This affects `#[hitori::position(first)]` attribute.
+/// - **`iter`** – an iterator over the characters and indices of their **ends**.
+/// This is unlike what [`CharIndices`] produces, as the indices there are the
+/// starts of the characters. [`string`] module provides [`CharEnds`] iterator
+/// that could be used for strings instead.
 ///
 /// [`CharIndices`]: core::str::CharIndices
+/// [`string`]: crate::string
+/// [`CharEnds`]: crate::string::CharEnds
 #[inline]
-pub fn matches<E, C, Idx, Ch, I>(
+pub fn starts_with<E, Idx, Ch, I>(
     mut expr: E,
-    mut capture: C,
     start: Idx,
+    is_first: bool,
     iter: I,
-) -> Result<Option<RangeTo<Idx>>, <C as CaptureMut>::Error>
+) -> Option<Match<Idx, E::Capture, I::IntoIter>>
 where
-    E: ExprMut<C, Idx, Ch>,
-    C: CaptureMut,
-    Idx: Clone,
+    E: ExprMut<Idx, Ch>,
     I: IntoIterator<Item = (Idx, Ch)>,
     I::IntoIter: Clone,
 {
-    expr.matches(&mut capture, start, iter)
+    expr.starts_with_mut(start, is_first, iter)
 }
 
-/// The indices `iter` produces must be `Ch` ends.
-/// This is unlike [`CharIndices`] that iterates over `char` starts.
+/// Finds the first subsequence of characters that is matched by [`ExprMut`].
 ///
-/// [`CharIndices`]: core::str::CharIndices
-pub fn matches_no_capture<E, Idx, Ch, I>(expr: E, start: Idx, iter: I) -> Option<RangeTo<Idx>>
-where
-    E: ExprMut<(), Idx, Ch>,
-    Idx: Clone,
-    I: IntoIterator<Item = (Idx, Ch)>,
-    I::IntoIter: Clone,
-{
-    matches(expr, (), start, iter).unwrap()
-}
-
-/// The indices `iter` produces must be `Ch` ends.
-/// This is unlike [`CharIndices`] that iterates over `char` starts.
-///
-/// [`CharIndices`]: core::str::CharIndices
-pub fn find<E, C, Idx, Ch, I>(
+/// *See [`starts_with`] for arguments description*
+pub fn find<E, Idx, Ch, I>(
     mut expr: E,
-    mut capture: C,
     mut start: Idx,
+    is_first: bool,
     iter: I,
-) -> Result<Option<Range<Idx>>, <C as CaptureMut>::Error>
+) -> Option<Match<Idx, E::Capture, I::IntoIter>>
 where
-    E: ExprMut<C, Idx, Ch>,
-    C: CaptureMut,
+    E: ExprMut<Idx, Ch>,
     Idx: Clone,
     I: IntoIterator<Item = (Idx, Ch)>,
     I::IntoIter: Clone,
 {
     let mut iter = iter.into_iter();
     loop {
-        if let Some(RangeTo { end }) = expr.matches(&mut capture, start.clone(), iter.clone())? {
-            return Ok(Some(start..end));
+        if let Some(matched) = expr.starts_with_mut(start.clone(), is_first, iter.clone()) {
+            return Some(matched);
         } else if let Some((new_start, _)) = iter.next() {
-            capture.clear();
             start = new_start;
         } else {
-            return Ok(None);
+            return None;
         }
     }
-}
-
-/// The indices `iter` produces must be `Ch` ends.
-/// This is unlike [`CharIndices`] that iterates over `char` starts.
-///
-/// [`CharIndices`]: core::str::CharIndices
-pub fn find_no_capture<E, Idx, Ch, I>(expr: E, start: Idx, iter: I) -> Option<Range<Idx>>
-where
-    E: ExprMut<(), Idx, Ch>,
-    Idx: Clone,
-    I: IntoIterator<Item = (Idx, Ch)>,
-    I::IntoIter: Clone,
-{
-    find(expr, (), start, iter).unwrap()
 }

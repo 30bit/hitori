@@ -1,14 +1,33 @@
-use crate as hitori;
-pub struct Float;
+//! An any-pattern matches if one of its subpatterns matches.
+//! In [hitori] syntax it is represented as an array of its subpatterns.
+//!
+//! ```
+#![doc = include_example!("any_patterns/float_type")]
+//!
+//! assert!(hitori::string::starts_with(FloatType, "f64").is_some());
+//! assert!(hitori::string::starts_with(FloatType, "f128").is_none());
+//! ```
+//! *equivalent to `f(32|64)` in [regex] syntax*
+//!
+//! ### Empty any-pattern
+//!
+//! An empty any-pattern is always false.
+//!
+//! ```
+#![doc = include_example!("any_patterns/false_")]
+//!
+//! for s in ["Hello, world!", "34", "hitori"] {
+//!     assert!(hitori::string::starts_with(False, s).is_none());
+//! }
+//! ```
+//!
+//! [hitori]: https://docs.rs/hitori
+//! [regex]: https://docs.rs/regex
 
-#[hitori::impl_expr(and_expr_mut)]
-impl Expr<(), usize, char> for Float {
-    const PATTERN: _ = (
-        |ch| ch == 'f',
-        // this is an any-pattern
-        [
-            (|ch| ch == '3', |ch| ch == '2'),
-            (|ch| ch == '6', |ch| ch == '4'),
-        ],
-    );
-}
+mod false_;
+mod float_type;
+
+pub use false_::{False, FalseCapture};
+pub use float_type::{FloatType, FloatTypeCapture};
+
+use super::include_example;

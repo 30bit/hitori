@@ -2,9 +2,10 @@
 members = ["hitori", "hitori-macros"]
 
 [workspace.package]
-version = "0.1.5"
+version = "0.2.0"
 authors = ["Artur Helmanau <m30bit@gmail.com>"]
 license = "MIT OR Apache-2.0"
 edition = "2021"
 repository = "https://github.com/30bit/hitori"
 documentation = "https://docs.rs/hitori"
+rust-version = "1.56"

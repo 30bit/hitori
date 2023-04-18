@@ -10,16 +10,23 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 documentation.workspace = true
+rust-version.workspace = true
 
 [features]
-default = ["box", "macros"]
-# blanket implementations of all traits for boxes using alloc crate.
-box = ["hitori-macros?/box"]
+default = ["alloc", "macros"]
+# string replace functions and blanket implementations 
+# of hitori traits for boxes using alloc crate.
+alloc = []
 # `impl_expr_mut` and `impl_expr` macros.
 macros = ["hitori-macros"]
 # finds hitori package to be used in macros even if
 # it has been renamed in Cargo.toml. `macros` is required.
 find-hitori = ["hitori-macros?/proc-macro-crate"]
+# includes examples module into build
+examples = []
 
 [dependencies]
-hitori-macros = { version = "=0.1.5", path = "../hitori-macros", optional = true }
+hitori-macros = { version = "=0.2.0", path = "../hitori-macros", optional = true }
+
+[dev-dependencies]
+regex = "1.7.3"
