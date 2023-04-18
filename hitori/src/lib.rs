@@ -1,20 +1,30 @@
-//! Hitori is a generic partially regular expressions library. It works by creating series of
-//! if-statements for each expression at compile-time. Capturing is done through structs.
+//! Hitori is a generic partially-regular expressions library. 
+//! It works by creating series of if-statements for each expression at compile-time. 
+//! Capturing is done through structs.
 //!  
-//! *See code samples along with impls and structs they expand to in [`examples`].*
-//!
+//! *See code samples along with the traits, impls and structs they expand to in [`examples`].*
+//! 
+//! # Limitations
+//! 
+//! Pattern matching is step-by-step. It is impossible to to detach last element of a repetition. 
+//! For example, using [regex] one can rewrite `a+` as `a*a` and it would still  match any 
+//! sequence of `a`s longer than zero. With [hitori], however, `a*` would consume
+//! all the `a`s, and the expression won't match. 
+//! 
+//! Step-by step pattern matching also leads to diminished performance when matching
+//! large texts with an expression that contains repetitions of characters frequent in the text.
+//! 
 //! # Crate features
-//!
-//! - **`box`** *(enabled by default)* – blanket implementations of [hitori] traits
-//!   for boxes using alloc crate.
+//! 
+//! - **`alloc`** *(enabled by default)* – string replace functions and blanket implementations 
+//!   of [hitori] traits for boxes using alloc crate.
 //! - **`macros`** *(enabled by default)* – [`impl_expr_mut`] and [`impl_expr`] macros.
-//! - **`find-hitori`** – finds hitori package to be used in macros
+//! - **`find-hitori`** – finds hitori package to be used in macros 
 //!   even if it has been renamed in Cargo.toml. **`macros`** feature is required.
-//! - **`examples`** – includes [`examples`] module into the build
+//! - **`examples`** – includes [`examples`] module into the build.
 //!
 //! [hitori]: https://docs.rs/hitori
-//! [`impl_expr_mut`]: crate::impl_expr_mut
-//! [`impl_expr`]: crate::impl_expr
+//! [regex]: https://docs.rs/regex
 
 #![no_std]
 #![cfg_attr(
@@ -28,27 +38,24 @@ core::compile_error!(
     r#""find-hitori" feature doesn't do anything unless "macros" feature is enabled"#
 );
 
-#[cfg(feature = "box")]
+#[cfg(feature = "alloc")]
 extern crate alloc;
 
 #[cfg(all(
     any(doc, feature = "examples"),
-    feature = "box",
+    feature = "alloc",
     feature = "macros",
     not(feature = "find_hitori")
 ))]
-#[cfg_attr(doc, doc(cfg(doc)))]
+#[cfg_attr(doc, doc(cfg(feature = "examples")))]
 pub mod examples;
-/// Items specific to [`ExprMut<usize, char>`]
-///
-/// [`Expr<usize, char>`]: crate::ExprMut
 pub mod string;
 
 mod expr;
 mod generic;
 
-pub use expr::{Expr, ExprMut, Matched};
-pub use generic::{find, matches, Found};
+pub use expr::{Expr, ExprMut, Match};
+pub use generic::{find, starts_with};
 
 /// Implements [`Expr`] and [`ExprMut`] for the type.
 ///

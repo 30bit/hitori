@@ -15,6 +15,7 @@ use state::State;
 use std::collections::BTreeSet;
 use syn::{punctuated::Punctuated, Attribute, Expr, GenericParam, Token, Type, WhereClause};
 
+#[allow(clippy::too_many_arguments)]
 fn partial_impl_wrapper(
     is_mut: bool,
     capture_ident: &Ident,
@@ -265,14 +266,14 @@ impl<'a> Input<'a> {
             let mut wrapper = #wrapper_ident {
                 __target: self,
                 __capture: ::core::default::Default::default(),
-                __end: start,
+                __end: start.clone(),
                 __is_first: is_first,
                 __iter: ::core::iter::IntoIterator::into_iter(iter),
                 __phantom: ::core::marker::PhantomData,
             };
             if wrapper.#total_matches_ident() {
-                ::core::option::Option::Some(#hitori_ident::Matched {
-                    end: wrapper.__end,
+                ::core::option::Option::Some(#hitori_ident::Match {
+                    range: start..wrapper.__end,
                     capture: wrapper.__capture,
                     iter_remainder: wrapper.__iter,
                     is_iter_advanced: !wrapper.__is_first,

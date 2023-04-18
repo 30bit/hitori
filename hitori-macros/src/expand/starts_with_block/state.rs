@@ -101,7 +101,7 @@ impl State {
         if any.len() > 1 {
             restoring_branch(&any[any.len() - 2], &vars.restore())?;
         }
-        if any.len() != 0 {
+        if !any.is_empty() {
             inner_capture_idents.append(&mut self.push_tree(any.last().unwrap().try_into()?)?);
             let branch_subexpr_matches = self.unwrap_prev_subexpr_matches_ident();
             block.extend(quote! {

@@ -1,9 +1,12 @@
+#![cfg(feature = "examples")]
 #![feature(test)]
 
 extern crate test;
 
 use hitori::{
-    examples::{Email as HitoriEmail, IpV4 as HitoriIpV4, Uri as HitoriUri},
+    examples::putting_everything_together::{
+        Email as HitoriEmail, IpV4 as HitoriIpV4, Uri as HitoriUri,
+    },
     Expr,
 };
 use regex::Regex;

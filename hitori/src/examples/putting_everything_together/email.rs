@@ -1,4 +1,5 @@
 use crate as hitori;
+/// Email address
 pub struct Email;
 
 #[hitori::impl_expr]

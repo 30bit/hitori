@@ -1,14 +1,16 @@
+//! Items specific to [`ExprMut<usize, char>`]
+
 use crate::{
-    expr::{ExprMut, Matched},
-    generic::{self, Found},
+    expr::{ExprMut, Match},
+    generic,
 };
+#[cfg(feature = "alloc")]
+use alloc::{borrow::Cow, string::String};
 use core::{iter::FusedIterator, mem, str::CharIndices};
 
-/// Like [`CharIndices`], but tuples contain [`char`] ends
+/// Like [`CharIndices`], but tuples contain exclusive [`char`] ends
 /// instead of [`char`] starts
-///
-/// [`CharIndices`]: core::str::CharIndices
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct CharEnds<'a> {
     next: char,
     indices: CharIndices<'a>,
@@ -50,25 +52,31 @@ impl<'a> Iterator for CharEnds<'a> {
 
 impl<'a> FusedIterator for CharEnds<'a> {}
 
+/// Shorthand for [`CharEnds::new`]
+#[inline]
+pub fn char_ends<'a>(s: &'a str) -> CharEnds<'a> {
+    CharEnds::new(s)
+}
+
 /// Checks if a [`str`] starts with [`ExprMut`]-matched characters
 #[inline]
-pub fn matches<E>(expr: E, s: &str) -> Option<Matched<usize, E::Capture, CharEnds>>
+pub fn starts_with<E>(expr: E, s: &str) -> Option<Match<usize, E::Capture, CharEnds>>
 where
     E: ExprMut<usize, char>,
 {
-    generic::matches(expr, 0, true, CharEnds::from(s))
+    generic::starts_with(expr, 0, true, CharEnds::from(s))
 }
 
-/// An iterator of successive non-overlapping [`matches`](crate::string::matches)
-/// that start where previous [`Matched`] ends
-#[derive(Clone, Debug)]
-pub struct MatchesIter<'a, E> {
+/// An iterator of successive non-overlapping [`Match`]es
+/// that start where previous [`Match`] ends
+#[derive(Clone)]
+pub struct Repeat<'a, E> {
     expr: E,
     start: usize,
     iter: CharEnds<'a>,
 }
 
-impl<'a, E> MatchesIter<'a, E> {
+impl<'a, E> Repeat<'a, E> {
     pub fn new(expr: E, s: &'a str) -> Self {
         Self {
             expr,
@@ -78,28 +86,34 @@ impl<'a, E> MatchesIter<'a, E> {
     }
 }
 
-impl<'a, E> Iterator for MatchesIter<'a, E>
+impl<'a, E> Iterator for Repeat<'a, E>
 where
     E: ExprMut<usize, char>,
 {
-    type Item = Matched<usize, E::Capture, CharEnds<'a>>;
+    type Item = Match<usize, E::Capture, CharEnds<'a>>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let matched = generic::matches(
+        let matched = generic::starts_with(
             &mut self.expr,
             self.start,
             self.start == 0,
             self.iter.clone(),
         )?;
-        self.start = matched.end;
+        self.start = matched.range.end;
         self.iter = matched.iter_remainder.clone();
         Some(matched)
     }
 }
 
+/// Shorthand for [`Repeat::new`]
+#[inline]
+pub fn repeat<'a, E>(expr: E, s: &'a str) -> Repeat<'a, E> {
+    Repeat::new(expr, s)
+}
+
 /// Finds the first substring that is matched by an [`ExprMut`]
 #[inline]
-pub fn find<E>(expr: E, s: &str) -> Option<Found<usize, E::Capture, CharEnds>>
+pub fn find<E>(expr: E, s: &str) -> Option<Match<usize, E::Capture, CharEnds>>
 where
     E: ExprMut<usize, char>,
 {
@@ -107,7 +121,7 @@ where
 }
 
 /// Iterator of successive non-overlapping [`find`]s
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct FindIter<'a, E> {
     expr: E,
     start: usize,
@@ -128,7 +142,7 @@ impl<'a, E> Iterator for FindIter<'a, E>
 where
     E: ExprMut<usize, char>,
 {
-    type Item = Found<usize, E::Capture, CharEnds<'a>>;
+    type Item = Match<usize, E::Capture, CharEnds<'a>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let found = generic::find(
@@ -141,4 +155,60 @@ where
         self.iter = found.iter_remainder.clone();
         Some(found)
     }
+}
+
+/// Shorthand for [`FindIter::new`]
+#[inline]
+pub fn find_iter<'a, E>(expr: E, s: &'a str) -> FindIter<'a, E> {
+    FindIter::new(expr, s)
+}
+
+#[cfg(feature = "alloc")]
+fn find_iter_replace<'a, I, C, F>(find_iter: I, s: &'a str, mut rep: F) -> Cow<'a, str>
+where
+    I: IntoIterator<Item = Match<usize, C, CharEnds<'a>>>,
+    F: FnMut(&mut String, I::Item),
+{
+    let mut replaced = String::new();
+    let mut start = 0;
+    for found in find_iter {
+        replaced.push_str(&s[start..mem::replace(&mut start, found.range.start)]);
+        rep(&mut replaced, found);
+    }
+    if replaced.is_empty() {
+        s.into()
+    } else {
+        replaced.push_str(&s[start..]);
+        replaced.into()
+    }
+}
+
+///  Replaces every matched substring using `rep` closure
+///
+/// First argument of the `rep` is the current [`String`] accumulator.
+/// Second is the current [`Match`].
+///
+/// Writing to the accumulator could be done using [`write!`].
+#[cfg(feature = "alloc")]
+#[cfg_attr(doc, doc(cfg(feature = "alloc")))]
+#[inline]
+pub fn replace<'a, E, F>(expr: E, s: &'a str, rep: F) -> Cow<'a, str>
+where
+    E: ExprMut<usize, char>,
+    F: FnMut(&mut String, Match<usize, E::Capture, CharEnds<'a>>),
+{
+    find_iter_replace(FindIter::new(expr, s), s, rep)
+}
+
+/// Replaces first `limit` matched substrings using `rep` closure.
+///
+/// *See [`replace`] for `rep` argument description*
+#[cfg(feature = "alloc")]
+#[cfg_attr(doc, doc(cfg(feature = "alloc")))]
+pub fn replacen<'a, E, F>(expr: E, limit: usize, s: &'a str, rep: F) -> Cow<'a, str>
+where
+    E: ExprMut<usize, char>,
+    F: FnMut(&mut String, Match<usize, E::Capture, CharEnds<'a>>),
+{
+    find_iter_replace(FindIter::new(expr, s).take(limit), s, rep)
 }

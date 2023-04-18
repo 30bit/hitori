@@ -1,4 +1,4 @@
-mod matches_block;
+mod starts_with_block;
 
 use crate::{parse, utils::hitori_ident};
 use proc_macro2::{Ident, TokenStream};
@@ -21,25 +21,25 @@ fn impl_decl(
     }
 }
 
-fn matches_sig(
+fn starts_with_sig(
     hitori_ident: &Ident,
     is_mut: bool,
-    matches_ident: &Ident,
+    starts_with_ident: &Ident,
     iter_ident: &Ident,
     idx_ty: &Type,
     ch_ty: &Type,
     inline: bool,
 ) -> TokenStream {
     let inline = inline.then(|| quote! { #[inline] });
-    let mut_ = is_mut.then(|| <Token![mut]>::default());
+    let mut_ = is_mut.then(<Token![mut]>::default);
     quote! {
         #inline
-        fn #matches_ident<#iter_ident>(
+        fn #starts_with_ident<#iter_ident>(
             &#mut_ self,
             mut start: #idx_ty,
             is_first: bool,
             iter: #iter_ident,
-        ) -> ::core::option::Option<#hitori_ident::Matched<
+        ) -> ::core::option::Option<#hitori_ident::Match<
             #idx_ty,
             <Self as #hitori_ident::ExprMut<#idx_ty, #ch_ty>>::Capture,
             #iter_ident::IntoIter,
@@ -54,7 +54,7 @@ fn type_capture(capture_ident: &Ident, idx_ty: &Type) -> TokenStream {
     quote! { type Capture = #capture_ident<#idx_ty>; }
 }
 
-fn capture<'a>(
+fn capture(
     vis: &Visibility,
     ident: &Ident,
     idx_ident: &Ident,
@@ -102,13 +102,13 @@ fn capture<'a>(
     }
 }
 
-fn derived_impl_expr_mut_matches_block(
+fn derived_impl_expr_mut_starts_with_block(
     hitori_ident: &Ident,
     idx_ty: &Type,
     ch_ty: &Type,
 ) -> TokenStream {
     quote! {
-        <Self as #hitori_ident::Expr<#idx_ty, #ch_ty>>::matches(self, start, is_first, iter)
+        <Self as #hitori_ident::Expr<#idx_ty, #ch_ty>>::starts_with(self, start, is_first, iter)
     }
 }
 
@@ -125,16 +125,16 @@ pub fn expand(parsed: parse::Output) -> syn::Result<TokenStream> {
             parsed.where_clause.as_ref(),
         )
     };
-    let matches_sig = |is_mut, inline| {
-        let matches_ident = if is_mut {
-            format_ident!("matches_mut")
+    let starts_with_sig = |is_mut, inline| {
+        let starts_with_ident = if is_mut {
+            format_ident!("starts_with_mut")
         } else {
-            format_ident!("matches")
+            format_ident!("starts_with")
         };
-        matches_sig(
+        starts_with_sig(
             &hitori_ident,
             is_mut,
-            &matches_ident,
+            &starts_with_ident,
             &parsed.iter_ident,
             &parsed.idx_ty,
             &parsed.ch_ty,
@@ -143,36 +143,36 @@ pub fn expand(parsed: parse::Output) -> syn::Result<TokenStream> {
     };
 
     let type_capture = type_capture(&parsed.capture_ident, &parsed.idx_ty);
-    let (mut output, impl_decl, type_capture, matches_sig) = if parsed.is_mut {
+    let (mut output, impl_decl, type_capture, starts_with_sig) = if parsed.is_mut {
         (
             TokenStream::new(),
             impl_decl(&parsed.trait_ident),
             Some(type_capture),
-            matches_sig(true, false),
+            starts_with_sig(true, false),
         )
     } else {
         let impl_expr_decl = impl_decl(&parsed.trait_ident);
         let impl_expr_mut_decl = impl_decl(&format_ident!("ExprMut"));
-        let impl_expr_mut_matches_sig = matches_sig(true, true);
-        let impl_expr_mut_matches_block =
-            derived_impl_expr_mut_matches_block(&hitori_ident, &parsed.idx_ty, &parsed.ch_ty);
+        let impl_expr_mut_starts_with_sig = starts_with_sig(true, true);
+        let impl_expr_mut_starts_with_block =
+            derived_impl_expr_mut_starts_with_block(&hitori_ident, &parsed.idx_ty, &parsed.ch_ty);
         (
             quote! {
                 #impl_expr_mut_decl {
                     #type_capture
-                    #impl_expr_mut_matches_sig { #impl_expr_mut_matches_block }
+                    #impl_expr_mut_starts_with_sig { #impl_expr_mut_starts_with_block }
                 }
             },
             impl_expr_decl,
             None,
-            matches_sig(false, false),
+            starts_with_sig(false, false),
         )
     };
 
-    let matches_block::Output {
-        tokens: matches_block,
+    let starts_with_block::Output {
+        tokens: starts_with_block,
         inner_capture_idents,
-    } = matches_block::Input {
+    } = starts_with_block::Input {
         hitori_ident: &hitori_ident,
         is_mut: parsed.is_mut,
         capture_ident: &parsed.capture_ident,
@@ -190,7 +190,7 @@ pub fn expand(parsed: parse::Output) -> syn::Result<TokenStream> {
     output.extend(quote! {
         #impl_decl {
             #type_capture
-            #matches_sig { #matches_block }
+            #starts_with_sig { #starts_with_block }
         }
     });
 

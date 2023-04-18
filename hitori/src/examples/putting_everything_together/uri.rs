@@ -1,4 +1,5 @@
 use crate as hitori;
+/// Uniform Resource Identifier
 pub struct Uri;
 
 #[hitori::impl_expr]
