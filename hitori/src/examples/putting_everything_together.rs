@@ -1,4 +1,4 @@
-//! More complex examples of using [hitori]
+//! More complex examples
 //!
 //! ### Email
 //!
@@ -9,7 +9,7 @@
 //! let matched = hitori::string::starts_with(Email, s).unwrap();
 //! assert_eq!(&s[matched.capture.user.unwrap()], "user");
 //! assert_eq!(&s[matched.capture.domain_with_extension.unwrap()], "example.com");
-//! //assert_eq!(&s[matched.capture.domain_extension.unwrap()], "com");
+//! assert_eq!(&s[matched.capture.domain_extension.unwrap()], "com");
 //! ```
 //! *equivalent to `[\w\.+-]+@[\w\.-]+\.[\w\.-]+` in [regex] syntax*
 //!

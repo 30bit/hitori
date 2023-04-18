@@ -1,7 +1,7 @@
 use core::ops::Range;
 
 /// A single [`ExprMut`] match
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone)]
 pub struct Match<Idx, C, I> {
     /// Index [`Range`] of matched subsequence of characters
     pub range: Range<Idx>,
