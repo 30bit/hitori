@@ -7,16 +7,16 @@ impl Expr<usize, char> for Uri {
         #[hitori::capture(schema)]
         (
             #[hitori::repeat(ge = 1)]
-            (|ch: char| ch == '_' || ch.is_alphanumeric(),),
+            (|ch: char| ch == '_' || ch.is_ascii_alphanumeric(),),
         ),
         |ch| ch == ':',
         |ch| ch == '/',
         |ch| ch == '/',
         #[hitori::capture(path)]
         (
-            |ch: char| ch != '/' && ch != '?' && ch != '#' && !ch.is_whitespace(),
+            |ch: char| ch != '/' && ch != '?' && ch != '#' && !ch.is_ascii_whitespace(),
             #[hitori::repeat(ge = 1)]
-            (|ch: char| ch != '?' && ch != '#' && !ch.is_whitespace(),),
+            (|ch: char| ch != '?' && ch != '#' && !ch.is_ascii_whitespace(),),
         ),
         #[hitori::repeat(le = 1)]
         (
@@ -24,7 +24,7 @@ impl Expr<usize, char> for Uri {
             #[hitori::capture(query)]
             (
                 #[hitori::repeat(ge = 0)]
-                (|ch: char| ch != '#' && !ch.is_whitespace(),),
+                (|ch: char| ch != '#' && !ch.is_ascii_whitespace(),),
             ),
         ),
         #[hitori::repeat(le = 1)]
@@ -33,7 +33,7 @@ impl Expr<usize, char> for Uri {
             #[hitori::capture(fragment)]
             (
                 #[hitori::repeat(ge = 0)]
-                (|ch: char| !ch.is_whitespace(),),
+                (|ch: char| !ch.is_ascii_whitespace(),),
             ),
         ),
     );

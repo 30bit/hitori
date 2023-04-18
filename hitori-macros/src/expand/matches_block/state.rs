@@ -118,6 +118,9 @@ impl State {
 
     fn push_group(&mut self, group: Group) -> syn::Result<BTreeSet<Ident>> {
         match group {
+            Group::All(exactly_one) | Group::Any(exactly_one) if exactly_one.len() == 1 => {
+                self.push_tree((&exactly_one[0]).try_into()?)
+            }
             Group::All(all) => self.push_group_all(all),
             Group::Any(any) => self.push_group_any(any),
         }

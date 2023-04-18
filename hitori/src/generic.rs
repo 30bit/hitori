@@ -32,7 +32,7 @@ where
 }
 
 /// Returned by [`find`] and [`string::find`] functions
-/// 
+///
 /// [`string::find`]: crate::string::find
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct Found<Idx, C, I> {

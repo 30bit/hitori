@@ -36,6 +36,7 @@ impl<'a> From<&'a str> for CharEnds<'a> {
 impl<'a> Iterator for CharEnds<'a> {
     type Item = (usize, char);
 
+    #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
         if self.len == 0 {
             None
@@ -68,7 +69,7 @@ pub struct MatchesIter<'a, E> {
 }
 
 impl<'a, E> MatchesIter<'a, E> {
-    pub fn new<I>(expr: E, s: &'a str) -> Self {
+    pub fn new(expr: E, s: &'a str) -> Self {
         Self {
             expr,
             start: 0,
@@ -97,6 +98,7 @@ where
 }
 
 /// Finds the first substring that is matched by an [`ExprMut`]
+#[inline]
 pub fn find<E>(expr: E, s: &str) -> Option<Found<usize, E::Capture, CharEnds>>
 where
     E: ExprMut<usize, char>,
@@ -113,7 +115,7 @@ pub struct FindIter<'a, E> {
 }
 
 impl<'a, E> FindIter<'a, E> {
-    pub fn new<I>(expr: E, s: &'a str) -> Self {
+    pub fn new(expr: E, s: &'a str) -> Self {
         Self {
             expr,
             start: 0,
