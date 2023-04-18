@@ -131,25 +131,25 @@ impl HitoriAttribute {
     fn find(attrs: &[Attribute]) -> syn::Result<Option<Self>> {
         match find_le_one_hitori_attr(attrs) {
             Ok(Some(attr)) => Ok(Some(if hitori_attr_ident_eq_str(attr, "capture") {
-                if attr.tokens.is_empty() || eq_by_fmt(&attr.tokens, quote! { () }) {
+                let capture_idents = attr.parse_args_with(Punctuated::parse_terminated)?;
+                if capture_idents.is_empty() {
                     return Err(syn::Error::new_spanned(
                         attr,
                         "capture must contain at least one identifier \
                         (e.g. `#[hitori::capture(this)]`)",
                     ));
-                } else {
-                    Self::Capture(attr.parse_args_with(Punctuated::parse_terminated)?)
                 }
+                Self::Capture(capture_idents)
             } else if hitori_attr_ident_eq_str(attr, "repeat") {
-                if attr.tokens.is_empty() || eq_by_fmt(&attr.tokens, quote! { () }) {
+                let tokens = &attr.meta.require_list()?.tokens;
+                if tokens.is_empty() || eq_by_fmt(tokens, quote! { () }) {
                     return Err(syn::Error::new_spanned(
                         attr,
                         "repeat must contain at least one bound \
                         (e.g. `#[hitori::repeat(ge = 0)]`)",
                     ));
-                } else {
-                    Self::Repeat(attr.parse_args()?)
                 }
+                Self::Repeat(attr.parse_args()?)
             } else if hitori_attr_ident_eq_str(attr, "position") {
                 Self::Position(attr.parse_args()?)
             } else {

@@ -3,7 +3,7 @@ use proc_macro2::Ident;
 use syn::{
     parse::{Parse, ParseStream},
     punctuated::Punctuated,
-    Lit, Meta, MetaNameValue, Token, Visibility,
+    Expr, ExprLit, Lit, Meta, MetaNameValue, Token, Visibility,
 };
 
 pub struct Args {
@@ -22,7 +22,10 @@ impl TryFrom<Punctuated<Meta, Token![,]>> for Args {
             match arg {
                 Meta::NameValue(MetaNameValue {
                     path,
-                    lit: Lit::Str(s),
+                    value:
+                        Expr::Lit(ExprLit {
+                            lit: Lit::Str(s), ..
+                        }),
                     ..
                 }) => {
                     if path_eq_ident_str(path, "with_capture") {
@@ -45,7 +48,7 @@ impl TryFrom<Punctuated<Meta, Token![,]>> for Args {
                 _ => {
                     return Err(syn::Error::new_spanned(
                         arg,
-                        "expected `with_capture` or `with_capture_vis`",
+                        "expected `with_capture` or `with_capture_vis` with literal string value",
                     ))
                 }
             }
@@ -61,7 +64,7 @@ impl TryFrom<Punctuated<Meta, Token![,]>> for Args {
 impl Parse for Args {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         input
-            .parse_terminated::<_, Token![,]>(Meta::parse)
+            .parse_terminated(Meta::parse, Token![,])
             .and_then(TryInto::try_into)
     }
 }

@@ -2,10 +2,10 @@ use proc_macro2::{Ident, Literal, TokenStream};
 use quote::{format_ident, quote, ToTokens};
 use std::{convert, fmt::Write as _, mem};
 use syn::{
-    punctuated::Punctuated, Attribute, BinOp, Binding, Expr, ExprBinary, ExprLit, GenericArgument,
-    GenericParam, LifetimeDef, Lit, ParenthesizedGenericArguments, Path, PathArguments, ReturnType,
-    Token, Type, TypeImplTrait, TypeParam, TypeParamBound, TypeParen, TypePath, TypePtr,
-    TypeReference, TypeTraitObject,
+    punctuated::Punctuated, AssocType, Attribute, BinOp, Expr, ExprBinary, ExprLit,
+    GenericArgument, GenericParam, LifetimeParam, Lit, ParenthesizedGenericArguments, Path,
+    PathArguments, ReturnType, Token, Type, TypeImplTrait, TypeParam, TypeParamBound, TypeParen,
+    TypePath, TypePtr, TypeReference, TypeTraitObject,
 };
 
 pub fn hitori_ident() -> Ident {
@@ -20,7 +20,7 @@ pub fn hitori_ident() -> Ident {
 }
 
 pub fn hitori_attr_ident_eq_str(attr: &Attribute, s: &str) -> bool {
-    let segments = &attr.path.segments;
+    let segments = &attr.path().segments;
     assert!(segments.len() == 2, "bug");
     assert_eq!(segments[0].ident, "hitori", "bug");
     segments[1].ident == s
@@ -36,7 +36,7 @@ fn is_hitori_attr_path(attr_path: &Path) -> bool {
 fn find_hitori_attr_index(attrs: &[Attribute]) -> Option<usize> {
     attrs
         .iter()
-        .position(|attr| is_hitori_attr_path(&attr.path) && attr.path.segments.len() == 2)
+        .position(|attr| is_hitori_attr_path(attr.path()) && attr.path().segments.len() == 2)
 }
 
 struct FindHitoriAttrsIndices<'a>(&'a [Attribute]);
@@ -92,10 +92,10 @@ pub fn path_eq_ident_str(path: &Path, ident_str: &str) -> bool {
 }
 
 pub fn lifetimes_into_punctuated_unit_refs<'a>(
-    iter: impl IntoIterator<Item = &'a LifetimeDef>,
+    iter: impl IntoIterator<Item = &'a LifetimeParam>,
 ) -> TokenStream {
     let mut output = TokenStream::new();
-    for LifetimeDef { lifetime, .. } in iter {
+    for LifetimeParam { lifetime, .. } in iter {
         output.extend(quote! { & #lifetime (), });
     }
     output
@@ -165,16 +165,19 @@ pub fn expr_add_one_usize(expr: Expr) -> Expr {
     })
 }
 
-pub fn expr_try_from_lit_int_or_lit_str_expr(lit: Lit) -> syn::Result<Expr> {
-    match &lit {
-        Lit::Int(_) => Ok(Expr::Lit(ExprLit { attrs: vec![], lit })),
-        Lit::Str(s) => s.parse(),
-        _ => Err(syn::Error::new_spanned(
-            lit,
-            "expected either a literal `usize` or an expression \
-                within literal string",
-        )),
+pub fn expr_try_from_lit_int_or_lit_str_expr(expr: Expr) -> syn::Result<Expr> {
+    if let Expr::Lit(lit) = &expr {
+        match &lit.lit {
+            Lit::Int(_) => return Ok(expr),
+            Lit::Str(s) => return s.parse(),
+            _ => (),
+        }
     }
+    Err(syn::Error::new_spanned(
+        expr,
+        "expected either a literal `usize` or an expression \
+            within literal string",
+    ))
 }
 
 fn is_any_generic_param_eq_ident(
@@ -254,7 +257,7 @@ pub fn has_type_param_bound_any_generic_params(
 ) -> bool {
     match bound {
         TypeParamBound::Trait(bound) => is_any_generic_param_in_path_args(params, &bound.path),
-        TypeParamBound::Lifetime(_) => false,
+        _ => false,
     }
 }
 
@@ -280,7 +283,7 @@ pub fn has_generic_arg_any_generic_params(
     arg: &GenericArgument,
 ) -> bool {
     match arg {
-        GenericArgument::Type(ty) | GenericArgument::Binding(Binding { ty, .. }) => {
+        GenericArgument::Type(ty) | GenericArgument::AssocType(AssocType { ty, .. }) => {
             has_type_any_generic_params(params, ty)
         }
         GenericArgument::Constraint(constraint) => constraint

@@ -15,7 +15,7 @@ impl Internal {
     ) -> syn::Result<()> {
         if repeat.is_none() {
             *repeat = Some(Internal::Exact(expr_try_from_lit_int_or_lit_str_expr(
-                name_value.lit,
+                name_value.value,
             )?));
             Ok(())
         } else {
@@ -34,7 +34,7 @@ impl Internal {
     ) -> syn::Result<()> {
         if repeat.is_none() {
             *repeat = Some(Internal::In {
-                lo: bound(expr_try_from_lit_int_or_lit_str_expr(name_value.lit)?),
+                lo: bound(expr_try_from_lit_int_or_lit_str_expr(name_value.value)?),
                 hi: Bound::Unbounded,
             })
         } else if let Some(Internal::In {
@@ -42,7 +42,7 @@ impl Internal {
             hi: _,
         }) = repeat
         {
-            *lo = bound(expr_try_from_lit_int_or_lit_str_expr(name_value.lit)?);
+            *lo = bound(expr_try_from_lit_int_or_lit_str_expr(name_value.value)?);
         } else {
             return Err(syn::Error::new_spanned(&name_value.path, err_msg));
         }
@@ -58,14 +58,14 @@ impl Internal {
         if repeat.is_none() {
             *repeat = Some(Internal::In {
                 lo: Bound::Unbounded,
-                hi: bound(expr_try_from_lit_int_or_lit_str_expr(name_value.lit)?),
+                hi: bound(expr_try_from_lit_int_or_lit_str_expr(name_value.value)?),
             })
         } else if let Some(Internal::In {
             lo: _,
             hi: hi @ Bound::Unbounded,
         }) = repeat
         {
-            *hi = bound(expr_try_from_lit_int_or_lit_str_expr(name_value.lit)?);
+            *hi = bound(expr_try_from_lit_int_or_lit_str_expr(name_value.value)?);
         } else {
             return Err(syn::Error::new_spanned(&name_value.path, err_msg));
         }

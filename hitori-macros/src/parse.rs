@@ -14,7 +14,7 @@ use syn::{
     parse2,
     punctuated::{self, Punctuated},
     Expr, GenericParam, ImplItem, ImplItemConst, ItemImpl, Path, PathArguments, PathSegment, Token,
-    Type, TypePath, VisPublic, Visibility, WhereClause,
+    Type, TypePath, Visibility, WhereClause,
 };
 
 fn trait_ident_and_args(mut path: Path) -> syn::Result<(Ident, [Type; 2])> {
@@ -58,11 +58,7 @@ fn const_expr(items: Vec<ImplItem>) -> syn::Result<Expr> {
                         return Ok(const_);
                     });
                 }
-                ImplItem::Method(method) => method.into_token_stream(),
-                ImplItem::Type(ty) => ty.into_token_stream(),
-                ImplItem::Macro(macro_) => macro_.into_token_stream(),
-                ImplItem::Verbatim(verbatim) => verbatim,
-                _ => TokenStream::new(),
+                item => item.into_token_stream(),
             },
             "not a const item",
         ))
@@ -133,11 +129,9 @@ impl Output {
 
         let is_idx_generic = has_type_any_generic_params(&item.generics.params, &idx_ty);
 
-        let vis = args.capture_vis.unwrap_or_else(|| {
-            Visibility::Public(VisPublic {
-                pub_token: Default::default(),
-            })
-        });
+        let vis = args
+            .capture_vis
+            .unwrap_or_else(|| Visibility::Public(<Token![pub]>::default()));
 
         let capture_ident = if let Some(ident) = args.capture_ident {
             ident
