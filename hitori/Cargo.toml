@@ -1,7 +1,7 @@
 [package]
 name = "hitori"
 categories = ["text-processing"]
-description = "Generic regular expressions"
+description = "Generic compile-time regular expressions"
 keywords = ["regex"]
 readme = "../README.md"
 version.workspace = true
