@@ -1,6 +1,6 @@
 use core::ops::Range;
 
-/// A single [`ExprMut`] match
+/// Single [`ExprMut`] match
 #[derive(Clone)]
 pub struct Match<Idx, C, I> {
     /// Index [`Range`] of matched subsequence of characters
@@ -13,7 +13,7 @@ pub struct Match<Idx, C, I> {
     pub is_iter_advanced: bool,
 }
 
-/// Partially-regular expression with a mutable state
+/// Expression with a mutable state
 pub trait ExprMut<Idx, Ch> {
     type Capture;
 
@@ -29,7 +29,7 @@ pub trait ExprMut<Idx, Ch> {
         I::IntoIter: Clone;
 }
 
-/// Partially-regular expression with an immutable state
+/// Expression with an immutable state
 pub trait Expr<Idx, Ch>: ExprMut<Idx, Ch> {
     /// *See [`starts_with`](crate::generic::starts_with)*
     fn starts_with<I>(

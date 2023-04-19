@@ -1,13 +1,12 @@
-//! Hitori is a generic partially-regular expressions library.
-//! It works by creating series of if-statements for each expression at compile-time.
-//! Capturing is done through structs.
+//! Hitori is generic compile-time regular expressions library.
+//! It works by creating series of if-statements and for-loops for each expression.
 //!  
 //! *See code samples along with the traits, impls and structs they expand to in [`examples`].*
 //!
 //! # Limitations
 //!
 //! Pattern matching is step-by-step. It is impossible to to detach last element of a repetition.
-//! For example, using [regex] one can rewrite `a+` as `a*a` and it would still  match any
+//! For example, using [regex] one can rewrite `a+` as `a*a` and it would still match any
 //! sequence of `a`s longer than zero. With [hitori], however, `a*` would consume
 //! all the `a`s, and the expression won't match.
 //!
@@ -74,6 +73,7 @@ pub use hitori_macros::impl_expr;
 /// Implements [`ExprMut`] for the type.
 ///
 /// *See [`examples`] for code samples along with impls and structs they expand to.*
+///
 /// *See [`impl_expr`] for arguments description.*
 #[cfg(feature = "macros")]
 #[cfg_attr(doc, doc(cfg(feature = "macros")))]

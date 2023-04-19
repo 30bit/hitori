@@ -1,7 +1,7 @@
 [package]
 name = "hitori"
 categories = ["text-processing"]
-description = "Generic regular expressions"
+description = "Generic compile-time regular expressions"
 keywords = ["regex"]
 readme = "../README.md"
 version.workspace = true
@@ -26,7 +26,7 @@ find-hitori = ["hitori-macros?/proc-macro-crate"]
 examples = []
 
 [dependencies]
-hitori-macros = { version = "=0.2.1", path = "../hitori-macros", optional = true }
+hitori-macros = { version = "=0.2.2", path = "../hitori-macros", optional = true }
 
 [dev-dependencies]
 regex = "1.7.3"
