@@ -1,6 +1,5 @@
 use core::ops::Range;
 
-
 /// Single [`ExprMut`] match
 #[derive(Clone)]
 pub struct Match<Idx, C, I> {
