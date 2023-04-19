@@ -73,6 +73,7 @@ pub use hitori_macros::impl_expr;
 /// Implements [`ExprMut`] for the type.
 ///
 /// *See [`examples`] for code samples along with impls and structs they expand to.*
+/// 
 /// *See [`impl_expr`] for arguments description.*
 #[cfg(feature = "macros")]
 #[cfg_attr(doc, doc(cfg(feature = "macros")))]
