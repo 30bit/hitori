@@ -45,4 +45,4 @@ jobs:
       - run: cargo check ${{env.target}}
       - run: cargo check ${{env.target}} --features find-hitori
       - if: matrix.components == 'rustc-dev'
-        run: git submodule init && git submodule update && cargo check --benches --all-features --release
+        run: 'git submodule init && git submodule update && cargo check --benches --all-features --release'
