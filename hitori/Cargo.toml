@@ -28,3 +28,4 @@ hitori-macros = { version = "=0.2.3", path = "../hitori-macros", optional = true
 
 [dev-dependencies]
 regex = "1.7.3"
+hitori-examples = { version = "=0.2.3", path = "../hitori-examples" }

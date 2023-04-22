@@ -1,13 +1,10 @@
-#![cfg(feature = "examples")]
 #![feature(test)]
 
 extern crate test;
 
-use hitori::{
-    examples::putting_everything_together::{
-        Email as HitoriEmail, IpV4 as HitoriIpV4, Uri as HitoriUri,
-    },
-    Expr,
+use hitori::Expr;
+use hitori_examples::putting_everything_together::{
+    Email as HitoriEmail, IpV4 as HitoriIpV4, Uri as HitoriUri,
 };
 use regex::Regex;
 use test::Bencher;
