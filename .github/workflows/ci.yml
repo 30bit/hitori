@@ -38,11 +38,12 @@ jobs:
           toolchain: ${{matrix.rust}}
           targets: ${{matrix.target}}
           components: ${{matrix.components}}
-      - run: cargo check ${{env.target}} --no-default-features
-      - run: cargo check ${{env.target}} --no-default-features --features macros
-      - run: cargo check ${{env.target}} --no-default-features --features alloc
-      - run: '! cargo check ${{env.target}} --no-default-features --features find-hitori'
-      - run: cargo check ${{env.target}}
-      - run: cargo check ${{env.target}} --features find-hitori
+      - run: cargo check -p hitori ${{env.target}} --no-default-features
+      - run: cargo check -p hitori ${{env.target}} --no-default-features --features macros
+      - run: cargo check -p hitori ${{env.target}} --no-default-features --features alloc
+      - run: "! cargo check -p hitori ${{env.target}} --no-default-features --features find-hitori"
+      - run: cargo check -p hitori ${{env.target}}
+      - run: cargo check -p hitori ${{env.target}} --features find-hitori
       - if: matrix.components == 'rustc-dev'
-        run: 'git submodule init && git submodule update && cargo check --benches --all-features --release'
+        run: "git submodule init && git submodule update && cargo check -p hitori --benches --all-features --release"
+      - run: cargo check -p hitori-examples ${{env.target}}
