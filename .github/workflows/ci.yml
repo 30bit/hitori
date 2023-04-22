@@ -41,7 +41,7 @@ jobs:
       - run: cargo check ${{env.target}} --no-default-features
       - run: cargo check ${{env.target}} --no-default-features --features macros
       - run: cargo check ${{env.target}} --no-default-features --features alloc
-      - run: ! cargo check ${{env.target}} --no-default-features --features find-hitori
+      - run: '! cargo check ${{env.target}} --no-default-features --features find-hitori'
       - run: cargo check ${{env.target}}
       - run: cargo check ${{env.target}} --features find-hitori
       - if: matrix.components == 'rustc-dev'
