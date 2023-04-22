@@ -2,6 +2,7 @@
 name = "hitori"
 categories = ["text-processing"]
 description = "Generic compile-time regular expressions"
+documentation = "https://docs.rs/hitori"
 keywords = ["regex"]
 readme = "../README.md"
 version.workspace = true
@@ -9,7 +10,6 @@ authors.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-documentation.workspace = true
 rust-version.workspace = true
 
 [features]
@@ -26,7 +26,7 @@ find-hitori = ["hitori-macros?/proc-macro-crate"]
 examples = []
 
 [dependencies]
-hitori-macros = { version = "=0.2.2", path = "../hitori-macros", optional = true }
+hitori-macros = { version = "=0.2.3", path = "../hitori-macros", optional = true }
 
 [dev-dependencies]
 regex = "1.7.3"

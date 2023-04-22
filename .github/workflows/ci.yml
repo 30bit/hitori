@@ -1,0 +1,47 @@
+name: Rust
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+env:
+  RUSTFLAGS: -Dwarnings
+
+jobs:
+  build:
+    name: ${{matrix.name || format('Rust {0}', matrix.rust)}}
+    runs-on: ${{matrix.os || 'ubuntu'}}-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rust: [stable, beta, 1.56.0]
+        include:
+          - rust: nightly
+            components: rustc-dev
+          - rust: nightly
+            name: WebAssembly
+            target: wasm32-unknown-unknown
+          - rust: nightly
+            name: WASI
+            target: wasm32-wasi
+          - rust: nightly
+            name: Windows
+            os: windows
+    env:
+      target: ${{matrix.target && format('--target={0}', matrix.target)}}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{matrix.rust}}
+          targets: ${{matrix.target}}
+          components: ${{matrix.components}}
+      - run: cargo check ${{env.target}} --no-default-features
+      - run: cargo check ${{env.target}} --no-default-features --features macros
+      - run: cargo check ${{env.target}} --no-default-features --features alloc
+      - run: cargo check ${{env.target}}
+      - run: cargo check ${{env.target}} --features find-hitori
+      - if: matrix.components == 'rustc-dev'
+        run: cargo check --benches --all-features --release
