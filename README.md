@@ -1,5 +1,6 @@
 [![hitori crate](https://img.shields.io/crates/v/hitori.svg)](https://crates.io/crates/hitori)
 [![hitori documentation](https://docs.rs/hitori/badge.svg)](https://docs.rs/hitori)
+[![Build status](https://github.com/30bit/hitori/workflows/build/badge.svg)](https://github.com/30bit/hitori/actions)
 
 Hitori is generic compile-time regular expressions library. 
 It works by creating series of if-statements and for-loops for each expression. 
