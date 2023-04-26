@@ -2,10 +2,14 @@
 
 extern crate test;
 
+mod hitori_examples {
+    include!("../../hitori-examples/src/putting_everything_together/email.rs");
+    include!("../../hitori-examples/src/putting_everything_together/ipv4.rs");
+    include!("../../hitori-examples/src/putting_everything_together/uri.rs");
+}
+
 use hitori::Expr;
-use hitori_examples::putting_everything_together::{
-    Email as HitoriEmail, IpV4 as HitoriIpV4, Uri as HitoriUri,
-};
+use hitori_examples::{Email as HitoriEmail, IpV4 as HitoriIpV4, Uri as HitoriUri};
 use regex::Regex;
 use test::Bencher;
 
