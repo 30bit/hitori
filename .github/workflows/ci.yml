@@ -48,7 +48,7 @@ jobs:
       - if: matrix.components == 'rustc-dev'
         run: "git submodule init && git submodule update && cargo check -p hitori --benches --all-features --release"
       - run: cargo check -p hitori-examples ${{env.target}}
-  
+
   test:
     name: Tests
     runs-on: ubuntu-latest
@@ -64,8 +64,8 @@ jobs:
           components: llvm-tools, rustc-dev
       - working-directory: ${{matrix.working-directory}}
         run: cargo test --all-features --release --tests
-      - working-directory: ${{matrix.working-directory}}
-        run: cargo test -p hitori --bench hitori_vs_regex
+      - working-directory: hitori
+        run: cargo test --bench hitori_vs_regex
 
   doc:
     name: Docs
@@ -116,7 +116,6 @@ jobs:
         env:
           MIRIFLAGS: -Zmiri-strict-provenance
         run: cargo miri test --all-features
-       
 
   clippy:
     name: Clippy
@@ -132,15 +131,15 @@ jobs:
         with:
           components: clippy, rustc-dev
       - working-directory: ${{matrix.working-directory}}
-        run: cargo clippy --all-features --tests --benches -- -Dclippy::all -Dclippy::pedantic
-  
+        run: "git submodule init && git submodule update && cargo clippy --all-features --tests --benches -- -Dclippy::all -Dclippy::pedantic"
+
   fmt:
     name: Formatting
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-    - uses: actions/checkout@v3
-    - uses: dtolnay/rust-toolchain@nightly
-      with:
-        components: rustfmt, rustc-dev
-    - run: cargo fmt --all -- --check
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt, rustc-dev
+      - run: cargo fmt --all -- --check
