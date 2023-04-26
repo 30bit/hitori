@@ -9,13 +9,13 @@ use syn::{
 };
 
 pub fn hitori_ident() -> Ident {
-    #[cfg(feature = "proc-macro-crate")]
+    #[cfg(feature = "find-hitori")]
     match proc_macro_crate::crate_name("hitori").expect("expected `hitori` package in `Cargo.toml`")
     {
         proc_macro_crate::FoundCrate::Itself => format_ident!("hitori"),
         proc_macro_crate::FoundCrate::Name(name) => format_ident!("{name}"),
     }
-    #[cfg(not(feature = "proc-macro-crate"))]
+    #[cfg(not(feature = "find-hitori"))]
     format_ident!("hitori")
 }
 
