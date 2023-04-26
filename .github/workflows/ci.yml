@@ -1,0 +1,145 @@
+name: Rust
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+env:
+  RUSTFLAGS: -Dwarnings
+
+jobs:
+  build:
+    name: ${{format('Build ({0})', matrix.name || matrix.rust)}}
+    runs-on: ${{matrix.os || 'ubuntu'}}-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rust: [stable, beta, 1.64.0]
+        include:
+          - rust: nightly
+            components: rustc-dev
+          - rust: nightly
+            name: WebAssembly
+            target: wasm32-unknown-unknown
+          - rust: nightly
+            name: WASI
+            target: wasm32-wasi
+          - rust: nightly
+            name: Windows
+            os: windows
+    env:
+      target: ${{matrix.target && format('--target={0}', matrix.target)}}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{matrix.rust}}
+          targets: ${{matrix.target}}
+          components: ${{matrix.components}}
+      - run: cargo check -p hitori ${{env.target}} --no-default-features
+      - run: cargo check -p hitori ${{env.target}} --no-default-features --features macros
+      - run: cargo check -p hitori ${{env.target}} --no-default-features --features alloc
+      - if: matrix.os != 'windows'
+        run: "! cargo check -p hitori ${{env.target}} --no-default-features --features find-hitori"
+      - run: cargo check -p hitori ${{env.target}}
+      - run: cargo check -p hitori ${{env.target}} --features find-hitori
+      - if: matrix.components == 'rustc-dev'
+        run: "git submodule init && git submodule update && cargo check -p hitori --benches --all-features --release"
+      - run: cargo check -p hitori-examples ${{env.target}}
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        working-directory: [hitori, hitori-examples]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: llvm-tools, rustc-dev
+      - working-directory: ${{matrix.working-directory}}
+        run: cargo test --all-features --release --tests
+      - working-directory: hitori
+        run: "git submodule init && git submodule update && cargo test --bench hitori_vs_regex"
+
+  doc:
+    name: Doc
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        working-directory: [hitori, hitori-examples]
+    env:
+      RUSTDOCFLAGS: --cfg=doc_cfg -Dbroken_intra_doc_links
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@nightly
+      - working-directory: ${{matrix.working-directory}}
+        run: cargo test --all-features --doc
+      - working-directory: ${{matrix.working-directory}}
+        run: cargo doc --all-features
+
+  msrv:
+    name: Minimal versions
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        working-directory: [hitori, hitori-examples]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@nightly
+      - working-directory: ${{matrix.working-directory}}
+        run: cargo update -Z minimal-versions
+      - working-directory: ${{matrix.working-directory}}
+        run: cargo check --all-features
+
+  miri:
+    name: Miri
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        working-directory: [hitori, hitori-examples]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@miri
+      - working-directory: ${{matrix.working-directory}}
+        env:
+          MIRIFLAGS: -Zmiri-strict-provenance
+        run: cargo miri test --all-features
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        working-directory: [hitori, hitori-examples]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: clippy, rustc-dev
+      - working-directory: ${{matrix.working-directory}}
+        run: "git submodule init && git submodule update && cargo clippy --all-features --tests --benches -- -Dclippy::all -Dclippy::pedantic"
+
+  fmt:
+    name: Fmt
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt, rustc-dev
+      - run: cargo fmt --all -- --check

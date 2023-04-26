@@ -1,0 +1,14 @@
+[package]
+name = "hitori-examples"
+description = "Examples for hitori"
+documentation = "https://docs.rs/hitori-examples"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[dependencies]
+hitori = { version = "=0.2.3", path = "../hitori" }

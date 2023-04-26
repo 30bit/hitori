@@ -116,7 +116,7 @@ impl State {
         Ok(inner_capture_idents)
     }
 
-    fn push_group(&mut self, group: Group) -> syn::Result<BTreeSet<Ident>> {
+    fn push_group(&mut self, group: &Group) -> syn::Result<BTreeSet<Ident>> {
         match group {
             Group::All(exactly_one) | Group::Any(exactly_one) if exactly_one.len() == 1 => {
                 self.push_tree((&exactly_one[0]).try_into()?)
@@ -128,14 +128,14 @@ impl State {
 
     fn push_repeated_group(
         &mut self,
-        group: Group,
-        repeat: Repeat,
+        group: &Group,
+        repeat: &Repeat,
     ) -> syn::Result<BTreeSet<Ident>> {
         let inner_capture_idents = self.push_group(group)?;
         self.push_subexpr_matches(
             "repeat",
             &repeat::expand_block(
-                &repeat,
+                repeat,
                 self.unwrap_prev_subexpr_matches_ident(),
                 &inner_capture_idents,
             ),
@@ -145,7 +145,7 @@ impl State {
 
     fn push_captured_group(
         &mut self,
-        group: Group,
+        group: &Group,
         capture_idents: Punctuated<Ident, Token![,]>,
     ) -> syn::Result<BTreeSet<Ident>> {
         let mut inner_capture_idents = self.push_group(group)?;
@@ -177,8 +177,8 @@ impl State {
 
     fn push_positioned_group(
         &mut self,
-        group: Group,
-        position: Position,
+        group: &Group,
+        position: &Position,
     ) -> syn::Result<BTreeSet<Ident>> {
         let inner_capture_idents = self.push_group(group)?;
         if matches!(position, Position::First | Position::FirstAndLast) {
@@ -227,22 +227,22 @@ impl State {
                     false
                 }
             },
-        )
+        );
     }
 
     pub(super) fn push_tree(&mut self, tree: Tree) -> syn::Result<BTreeSet<Ident>> {
         match tree {
             Tree::Group(group, maybe_attr) => match maybe_attr {
                 Some(attr) => match attr {
-                    HitoriAttribute::Repeat(repeat) => self.push_repeated_group(group, repeat),
+                    HitoriAttribute::Repeat(repeat) => self.push_repeated_group(&group, &repeat),
                     HitoriAttribute::Capture(capture_idents) => {
-                        self.push_captured_group(group, capture_idents)
+                        self.push_captured_group(&group, capture_idents)
                     }
                     HitoriAttribute::Position(position) => {
-                        self.push_positioned_group(group, position)
+                        self.push_positioned_group(&group, &position)
                     }
                 },
-                None => self.push_group(group),
+                None => self.push_group(&group),
             },
             Tree::Test(test) => {
                 self.push_test(test);

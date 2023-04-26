@@ -1,18 +1,20 @@
 [package]
 name = "hitori-macros"
 description = "Macros for hitori"
+documentation = "https://docs.rs/hitori-macros"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-documentation.workspace = true
 rust-version.workspace = true
+readme.workspace = true
 
 [lib]
 proc-macro = true
 
 [features]
+find-hitori = ["proc-macro-crate"]
 debug = ["rust-format"]
 
 [dependencies]

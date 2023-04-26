@@ -20,11 +20,10 @@ use syn::{
 fn trait_ident_and_args(mut path: Path) -> syn::Result<(Ident, [Type; 2])> {
     Err(
         if path.segments.len() != 1 || path.leading_colon.is_some() {
-            syn::Error::new_spanned(path, "expected ident")
-        } else {
-            let Some(punctuated::Pair::End(PathSegment { ident, arguments })) = path.segments.pop() else {
-            unreachable!()
-        };
+            syn::Error::new_spanned(path, "expected identifier")
+        } else if let Some(punctuated::Pair::End(PathSegment { ident, arguments })) =
+            path.segments.pop()
+        {
             match arguments {
                 PathArguments::AngleBracketed(args) => {
                     if args.args.len() == 2 {
@@ -32,20 +31,38 @@ fn trait_ident_and_args(mut path: Path) -> syn::Result<(Ident, [Type; 2])> {
                         let idx_arg = generic_arg_try_into_type(args.next().unwrap())?;
                         let ch_arg = generic_arg_try_into_type(args.next().unwrap())?;
                         return Ok((ident, [idx_arg, ch_arg]));
-                    } else {
-                        syn::Error::new_spanned(args, "expected 2 arguments")
                     }
+                    syn::Error::new_spanned(args, "expected 2 arguments")
                 }
                 PathArguments::Parenthesized(args) => {
                     syn::Error::new_spanned(args, "expected angle brackets around arguments")
                 }
                 PathArguments::None => syn::Error::new_spanned(ident, "expected 2 arguments"),
             }
+        } else {
+            unreachable!()
         },
     )
 }
 
 fn const_expr(items: Vec<ImplItem>) -> syn::Result<Expr> {
+    fn error(result: syn::Result<ImplItemConst>) -> syn::Error {
+        match result {
+            Ok(const_) => syn::Error::new_spanned(const_, "multiple const items"),
+            Err(err) => err,
+        }
+    }
+
+    fn combine_errors(
+        mut init: syn::Error,
+        iter: impl Iterator<Item = syn::Result<ImplItemConst>>,
+    ) -> syn::Error {
+        for result in iter {
+            init.combine(error(result));
+        }
+        init
+    }
+
     let mut const_iter = items.into_iter().map(|item| {
         Err(syn::Error::new_spanned(
             match item {
@@ -63,23 +80,6 @@ fn const_expr(items: Vec<ImplItem>) -> syn::Result<Expr> {
             "not a const item",
         ))
     });
-
-    fn error(result: syn::Result<ImplItemConst>) -> syn::Error {
-        match result {
-            Ok(const_) => syn::Error::new_spanned(const_, "multiple const items"),
-            Err(err) => err,
-        }
-    }
-
-    fn combine_errors(
-        mut init: syn::Error,
-        iter: impl Iterator<Item = syn::Result<ImplItemConst>>,
-    ) -> syn::Error {
-        for result in iter {
-            init.combine(error(result))
-        }
-        init
-    }
 
     Err(match const_iter.next() {
         Some(Ok(ImplItemConst { expr, .. })) => match const_iter.next() {

@@ -111,7 +111,7 @@ fn partial_impl_wrapper(
                     self.__target
                 }
             }
-        })
+        });
     }
 
     output.extend(quote! {

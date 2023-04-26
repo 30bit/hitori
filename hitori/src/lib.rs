@@ -1,7 +1,7 @@
 //! Hitori is generic compile-time regular expressions library.
 //! It works by creating series of if-statements and for-loops for each expression.
 //!  
-//! *See code samples along with the traits, impls and structs they expand to in [`examples`].*
+//! *See code samples along with the traits, impls and structs they expand to in [examples].*
 //!
 //! # Limitations
 //!
@@ -20,8 +20,8 @@
 //! - **`macros`** *(enabled by default)* – [`impl_expr_mut`] and [`impl_expr`] macros.
 //! - **`find-hitori`** – finds hitori package to be used in macros
 //!   even if it has been renamed in Cargo.toml. **`macros`** feature is required.
-//! - **`examples`** – includes [`examples`] module into the build.
 //!
+//! [examples]: https://docs.rs/hitori-examples
 //! [hitori]: https://docs.rs/hitori
 //! [regex]: https://docs.rs/regex
 
@@ -32,7 +32,7 @@
     allow(mixed_script_confusables, confusable_idents)
 )]
 
-#[cfg(all(feature = "find-hitori", not(feature = "hitori-macros")))]
+#[cfg(all(feature = "find-hitori", not(feature = "macros")))]
 core::compile_error!(
     r#""find-hitori" feature doesn't do anything unless "macros" feature is enabled"#
 );
@@ -40,41 +40,36 @@ core::compile_error!(
 #[cfg(feature = "alloc")]
 extern crate alloc;
 
-#[cfg(all(
-    any(doc, feature = "examples"),
-    feature = "alloc",
-    feature = "macros",
-    not(feature = "find_hitori")
-))]
-#[cfg_attr(doc, doc(cfg(feature = "examples")))]
-pub mod examples;
 pub mod string;
 
-mod expr;
 mod generic;
+mod traits;
 
-pub use expr::{Expr, ExprMut, Match};
 pub use generic::{find, starts_with};
+pub use traits::{Expr, ExprMut, Match};
 
 /// Implements [`Expr`] and [`ExprMut`] for the type.
 ///
-/// *See [`examples`] for code samples along with impls and structs they expand to.*
+/// *See [examples] for code samples along with impls and structs they expand to.*
 ///
 /// # Arguments
 ///
 /// - **`with_capture`** – sets the name of [`ExprMut::Capture`] struct.
 /// - **`with_capture_vis`** – sets visibility of [`ExprMut::Capture`] struct.
 ///
-/// [`ExprMut::Capture`]: crate::expr::ExprMut::Capture
+/// [examples]: https://docs.rs/hitori-examples
+/// [`ExprMut::Capture`]: ExprMut::Capture
 #[cfg(feature = "macros")]
 #[cfg_attr(doc, doc(cfg(feature = "macros")))]
 pub use hitori_macros::impl_expr;
 
 /// Implements [`ExprMut`] for the type.
 ///
-/// *See [`examples`] for code samples along with impls and structs they expand to.*
+/// *See [examples] for code samples along with impls and structs they expand to.*
 ///
 /// *See [`impl_expr`] for arguments description.*
+///
+/// [examples]: https://docs.rs/hitori-examples
 #[cfg(feature = "macros")]
 #[cfg_attr(doc, doc(cfg(feature = "macros")))]
 pub use hitori_macros::impl_expr_mut;

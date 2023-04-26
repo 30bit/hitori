@@ -2,6 +2,7 @@
 name = "hitori"
 categories = ["text-processing"]
 description = "Generic compile-time regular expressions"
+documentation = "https://docs.rs/hitori"
 keywords = ["regex"]
 readme = "../README.md"
 version.workspace = true
@@ -9,7 +10,6 @@ authors.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-documentation.workspace = true
 rust-version.workspace = true
 
 [features]
@@ -21,12 +21,10 @@ alloc = []
 macros = ["hitori-macros"]
 # finds hitori package to be used in macros even if
 # it has been renamed in Cargo.toml. `macros` is required.
-find-hitori = ["hitori-macros?/proc-macro-crate"]
-# includes examples module into build
-examples = []
+find-hitori = ["hitori-macros?/find-hitori"]
 
 [dependencies]
-hitori-macros = { version = "=0.2.2", path = "../hitori-macros", optional = true }
+hitori-macros = { version = "=0.2.3", path = "../hitori-macros", optional = true }
 
 [dev-dependencies]
 regex = "1.7.3"
