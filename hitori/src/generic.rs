@@ -1,4 +1,4 @@
-use crate::expr::{ExprMut, Match};
+use crate::traits::{ExprMut, Match};
 
 /// Checks if an [`Iterator`] starts with [`ExprMut`]-matched characters.
 ///

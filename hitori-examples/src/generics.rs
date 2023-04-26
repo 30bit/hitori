@@ -9,7 +9,7 @@
 //! assert!(hitori::string::starts_with(lang, prog).is_some())
 //! ```
 //!
-//! [`ExprMut`]: crate::ExprMut
+//! [`ExprMut`]: hitori::ExprMut
 
 mod all_in;
 

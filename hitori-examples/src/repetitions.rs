@@ -52,7 +52,7 @@
 //! *equivalent to `Would you kindly (?P<request>[^?!]+)[?!]` in [regex] syntax*
 //!
 //! [regex]: https://docs.rs/regex
-//! [`ExprMut`]: crate::ExprMut
+//! [`ExprMut`]: hitori::ExprMut
 
 mod binary_u32;
 mod identifier;

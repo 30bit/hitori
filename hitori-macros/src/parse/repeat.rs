@@ -36,7 +36,7 @@ impl Internal {
             *repeat = Some(Internal::In {
                 lo: bound(expr_try_from_lit_int_or_lit_str_expr(name_value.value)?),
                 hi: Bound::Unbounded,
-            })
+            });
         } else if let Some(Internal::In {
             lo: lo @ Bound::Unbounded,
             hi: _,
@@ -59,7 +59,7 @@ impl Internal {
             *repeat = Some(Internal::In {
                 lo: Bound::Unbounded,
                 hi: bound(expr_try_from_lit_int_or_lit_str_expr(name_value.value)?),
-            })
+            });
         } else if let Some(Internal::In {
             lo: _,
             hi: hi @ Bound::Unbounded,

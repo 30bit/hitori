@@ -21,7 +21,7 @@ alloc = []
 macros = ["hitori-macros"]
 # finds hitori package to be used in macros even if
 # it has been renamed in Cargo.toml. `macros` is required.
-find-hitori = ["hitori-macros?/proc-macro-crate"]
+find-hitori = ["hitori-macros?/find-hitori"]
 
 [dependencies]
 hitori-macros = { version = "=0.2.3", path = "../hitori-macros", optional = true }

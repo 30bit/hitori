@@ -82,9 +82,10 @@ fn capture(
             None,
         )
     };
-    let idx_bound = default_idx_ty
-        .map(|ty| quote! { #idx_ident = #ty })
-        .unwrap_or_else(|| idx_ident.to_token_stream());
+    let idx_bound = default_idx_ty.map_or_else(
+        || idx_ident.to_token_stream(),
+        |ty| quote! { #idx_ident = #ty },
+    );
     quote! {
         #doc
         #[derive(
@@ -198,7 +199,7 @@ pub fn expand(parsed: parse::Output) -> syn::Result<TokenStream> {
         &parsed.capture_vis,
         &parsed.capture_ident,
         &parsed.capture_idx_ident,
-        (!parsed.is_idx_generic).then(|| &parsed.idx_ty),
+        (!parsed.is_idx_generic).then_some(&parsed.idx_ty),
         &inner_capture_idents,
     ));
 

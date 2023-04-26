@@ -17,15 +17,13 @@ impl Parse for Position {
             if ident == "first" {
                 if first {
                     return Err(syn::Error::new_spanned(ident, "duplicate"));
-                } else {
-                    first = true;
                 }
+                first = true;
             } else if ident == "last" {
                 if last {
                     return Err(syn::Error::new_spanned(ident, "duplicate"));
-                } else {
-                    last = true;
                 }
+                last = true;
             }
         }
 

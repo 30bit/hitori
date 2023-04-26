@@ -48,15 +48,12 @@ impl<'a> Iterator for FindHitoriAttrsIndices<'a> {
         if self.0.is_empty() {
             return None;
         }
-        match find_hitori_attr_index(self.0) {
-            Some(index) => {
-                self.0 = &self.0[(index + 1)..];
-                Some(index)
-            }
-            None => {
-                self.0 = &[];
-                None
-            }
+        if let Some(index) = find_hitori_attr_index(self.0) {
+            self.0 = &self.0[(index + 1)..];
+            Some(index)
+        } else {
+            self.0 = &[];
+            None
         }
     }
 }
@@ -116,7 +113,7 @@ pub fn ident_not_in_generic_params(
     init: String,
 ) -> Ident {
     unique_ident(
-        params.iter().filter_map(|param| match param {
+        &params.iter().filter_map(|param| match param {
             GenericParam::Type(TypeParam { ident, .. }) => Some(ident),
             _ => None,
         }),
@@ -125,7 +122,7 @@ pub fn ident_not_in_generic_params(
 }
 
 pub fn unique_ident<'a>(
-    idents: impl Iterator<Item = &'a Ident> + Clone,
+    idents: &(impl Iterator<Item = &'a Ident> + Clone),
     mut init: String,
 ) -> Ident {
     while idents.clone().any(|ident| ident == &init) {
@@ -157,7 +154,7 @@ pub fn expr_add_one_usize(expr: Expr) -> Expr {
     Expr::Binary(ExprBinary {
         attrs: vec![],
         left: Box::new(expr),
-        op: BinOp::Add(Default::default()),
+        op: BinOp::Add(<Token![+]>::default()),
         right: Box::new(Expr::Lit(ExprLit {
             attrs: vec![],
             lit: Lit::Int(Literal::usize_suffixed(1).into()),
@@ -297,9 +294,9 @@ pub fn has_generic_arg_any_generic_params(
 pub fn remove_generic_params_bounds(params: &mut Punctuated<GenericParam, Token![,]>) {
     for param in params {
         if let GenericParam::Type(ty) = param {
-            ty.bounds = Punctuated::new()
+            ty.bounds = Punctuated::new();
         } else if let GenericParam::Lifetime(l) = param {
-            l.bounds = Punctuated::new()
+            l.bounds = Punctuated::new();
         }
     }
 }

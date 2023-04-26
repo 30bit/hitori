@@ -42,31 +42,34 @@ extern crate alloc;
 
 pub mod string;
 
-mod expr;
 mod generic;
+mod traits;
 
-pub use expr::{Expr, ExprMut, Match};
 pub use generic::{find, starts_with};
+pub use traits::{Expr, ExprMut, Match};
 
 /// Implements [`Expr`] and [`ExprMut`] for the type.
 ///
-/// *See [`examples`] for code samples along with impls and structs they expand to.*
+/// *See [examples] for code samples along with impls and structs they expand to.*
 ///
 /// # Arguments
 ///
 /// - **`with_capture`** – sets the name of [`ExprMut::Capture`] struct.
 /// - **`with_capture_vis`** – sets visibility of [`ExprMut::Capture`] struct.
 ///
-/// [`ExprMut::Capture`]: crate::expr::ExprMut::Capture
+/// [examples]: https://docs.rs/hitori-examples
+/// [`ExprMut::Capture`]: ExprMut::Capture
 #[cfg(feature = "macros")]
 #[cfg_attr(doc, doc(cfg(feature = "macros")))]
 pub use hitori_macros::impl_expr;
 
 /// Implements [`ExprMut`] for the type.
 ///
-/// *See [`examples`] for code samples along with impls and structs they expand to.*
+/// *See [examples] for code samples along with impls and structs they expand to.*
 ///
 /// *See [`impl_expr`] for arguments description.*
+///
+/// [examples]: https://docs.rs/hitori-examples
 #[cfg(feature = "macros")]
 #[cfg_attr(doc, doc(cfg(feature = "macros")))]
 pub use hitori_macros::impl_expr_mut;

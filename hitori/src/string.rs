@@ -1,8 +1,8 @@
 //! Items specific to [`ExprMut<usize, char>`]
 
 use crate::{
-    expr::{ExprMut, Match},
     generic,
+    traits::{ExprMut, Match},
 };
 #[cfg(feature = "alloc")]
 use alloc::{borrow::Cow, string::String};
@@ -18,6 +18,7 @@ pub struct CharEnds<'a> {
 }
 
 impl<'a> CharEnds<'a> {
+    #[must_use]
     pub fn new(s: &'a str) -> Self {
         let mut indices = s.char_indices();
         let (next, len) = match indices.next() {
@@ -38,7 +39,7 @@ impl<'a> From<&'a str> for CharEnds<'a> {
 impl<'a> Iterator for CharEnds<'a> {
     type Item = (usize, char);
 
-    #[inline(always)]
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         if self.len == 0 {
             None
@@ -54,6 +55,7 @@ impl<'a> FusedIterator for CharEnds<'a> {}
 
 /// Shorthand for [`CharEnds::new`]
 #[inline]
+#[must_use]
 pub fn char_ends(s: &str) -> CharEnds {
     CharEnds::new(s)
 }

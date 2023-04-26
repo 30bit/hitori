@@ -53,9 +53,9 @@ impl Vars {
     {
         let capture_idents = idents.into_iter();
         Self {
-            iter: unique_ident(capture_idents.clone(), "iter".into()),
-            is_first: unique_ident(capture_idents.clone(), "is_first".into()),
-            end: unique_ident(capture_idents, "end".into()),
+            iter: unique_ident(&capture_idents, "iter".into()),
+            is_first: unique_ident(&capture_idents, "is_first".into()),
+            end: unique_ident(&capture_idents, "end".into()),
         }
     }
 

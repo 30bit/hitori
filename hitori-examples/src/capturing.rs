@@ -55,7 +55,7 @@
 //! *equivalent to `◾ (?P<width>(?P<height>\d))|▬ (?P<width>\d) (?P<height>\d)`
 //! in [regex] syntax*
 //!
-//! [`ExprMut::Capture`]: crate::ExprMut::Capture
+//! [`ExprMut::Capture`]: hitori::ExprMut::Capture
 //! [regex]: https://docs.rs/regex
 
 mod fraction;
