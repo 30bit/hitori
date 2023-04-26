@@ -20,11 +20,10 @@ use syn::{
 fn trait_ident_and_args(mut path: Path) -> syn::Result<(Ident, [Type; 2])> {
     Err(
         if path.segments.len() != 1 || path.leading_colon.is_some() {
-            syn::Error::new_spanned(path, "expected ident")
-        } else {
-            let Some(punctuated::Pair::End(PathSegment { ident, arguments })) = path.segments.pop() else {
-            unreachable!()
-        };
+            syn::Error::new_spanned(path, "expected identifier")
+        } else if let Some(punctuated::Pair::End(PathSegment { ident, arguments })) =
+            path.segments.pop()
+        {
             match arguments {
                 PathArguments::AngleBracketed(args) => {
                     if args.args.len() == 2 {
@@ -41,6 +40,8 @@ fn trait_ident_and_args(mut path: Path) -> syn::Result<(Ident, [Type; 2])> {
                 }
                 PathArguments::None => syn::Error::new_spanned(ident, "expected 2 arguments"),
             }
+        } else {
+            unreachable!()
         },
     )
 }
