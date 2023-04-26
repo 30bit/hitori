@@ -28,6 +28,8 @@ jobs:
           - rust: nightly
             name: Windows
             os: windows
+    env:
+      target: ${{matrix.target && format('--target={0}', matrix.target)}}
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v3
@@ -36,50 +38,68 @@ jobs:
           toolchain: ${{matrix.rust}}
           targets: ${{matrix.target}}
           components: ${{matrix.components}}
-      - run: cargo check -p hitori --target ${{matrix.target}} --no-default-features
-      - run: cargo check -p hitori --target ${{matrix.target}} --no-default-features --features macros
-      - run: cargo check -p hitori --target ${{matrix.target}} --no-default-features --features alloc
+      - run: cargo check -p hitori ${{env.target}} --no-default-features
+      - run: cargo check -p hitori ${{env.target}} --no-default-features --features macros
+      - run: cargo check -p hitori ${{env.target}} --no-default-features --features alloc
       - if: matrix.os != 'windows'
-        run: "! cargo check -p hitori --target ${{matrix.target}} --no-default-features --features find-hitori"
-      - run: cargo check -p hitori --target ${{matrix.target}}
-      - run: cargo check -p hitori --target ${{matrix.target}} --features find-hitori
+        run: "! cargo check -p hitori ${{env.target}} --no-default-features --features find-hitori"
+      - run: cargo check -p hitori ${{env.target}}
+      - run: cargo check -p hitori ${{env.target}} --features find-hitori
       - if: matrix.components == 'rustc-dev'
         run: "git submodule init && git submodule update && cargo check -p hitori --benches --all-features --release"
-      - run: cargo check -p hitori-examples --target ${{matrix.target}}
+      - run: cargo check -p hitori-examples ${{env.target}}
   
   test:
     name: Tests
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        working-directory: [hitori, hitori-examples]
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@nightly
         with:
           components: llvm-tools, rustc-dev
-      - run: cargo test --all-features --release --tests
-      - run: cargo test -p hitori --bench hitori_vs_regex
+      - working-directory: ${{matrix.working-directory}}
+        run: cargo test --all-features --release --tests
+      - working-directory: ${{matrix.working-directory}}
+        run: cargo test -p hitori --bench hitori_vs_regex
 
   doc:
     name: Docs
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        working-directory: [hitori, hitori-examples]
     env:
       RUSTDOCFLAGS: --cfg=doc_cfg -Dbroken_intra_doc_links
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@nightly
-      - run: cargo test --all-features --doc
-      - run: cargo doc --all-features
+      - working-directory: ${{matrix.working-directory}}
+        run: cargo test --all-features --doc
+      - working-directory: ${{matrix.working-directory}}
+        run: cargo doc --all-features
 
   msrv:
     name: Minimal versions
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        working-directory: [hitori, hitori-examples]
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@nightly
-      - run: cargo update -Z minimal-versions
-      - run: cargo check --all-features
+      - working-directory: ${{matrix.working-directory}}
+        run: cargo update -Z minimal-versions
+      - working-directory: ${{matrix.working-directory}}
+        run: cargo check --all-features
 
   miri:
     name: Miri
@@ -89,25 +109,30 @@ jobs:
       matrix:
         working-directory: [hitori, hitori-examples]
     timeout-minutes: 45
-    env:
-        MIRIFLAGS: -Zmiri-strict-provenance
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@miri
       - working-directory: ${{matrix.working-directory}}
+        env:
+          MIRIFLAGS: -Zmiri-strict-provenance
         run: cargo miri test --all-features
        
 
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        working-directory: [hitori, hitori-examples]
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@nightly
         with:
           components: clippy, rustc-dev
-      - run: cargo clippy --all-features --tests --benches -- -Dclippy::all -Dclippy::pedantic
+      - working-directory: ${{matrix.working-directory}}
+        run: cargo clippy --all-features --tests --benches -- -Dclippy::all -Dclippy::pedantic
   
   fmt:
     name: Formatting
