@@ -10,7 +10,7 @@ env:
 
 jobs:
   build:
-    name: ${{matrix.name || format('Rust {0}', matrix.rust)}}
+    name: Build (${{matrix.name || matrix.rust)}})
     runs-on: ${{matrix.os || 'ubuntu'}}-latest
     strategy:
       fail-fast: false
@@ -65,7 +65,7 @@ jobs:
       - working-directory: ${{matrix.working-directory}}
         run: cargo test --all-features --release --tests
       - working-directory: hitori
-        run: cargo test --bench hitori_vs_regex
+        run: "git submodule init && git submodule update && cargo test --bench hitori_vs_regex"
 
   doc:
     name: Docs
