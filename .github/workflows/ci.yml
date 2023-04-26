@@ -50,7 +50,7 @@ jobs:
       - run: cargo check -p hitori-examples ${{env.target}}
 
   test:
-    name: Tests
+    name: Test
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -68,7 +68,7 @@ jobs:
         run: "git submodule init && git submodule update && cargo test --bench hitori_vs_regex"
 
   doc:
-    name: Docs
+    name: Doc
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -134,7 +134,7 @@ jobs:
         run: "git submodule init && git submodule update && cargo clippy --all-features --tests --benches -- -Dclippy::all -Dclippy::pedantic"
 
   fmt:
-    name: Formatting
+    name: Fmt
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
